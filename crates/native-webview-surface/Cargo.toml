@@ -1,0 +1,10 @@
+[package]
+name = "native-webview-surface"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Reusable boundary for native WebView and media surfaces."
+readme = "README.md"
+
+[lib]
+path = "src/lib.rs"

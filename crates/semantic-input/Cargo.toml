@@ -1,0 +1,10 @@
+[package]
+name = "semantic-input"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Semantic pointer, keyboard, touch, and gesture types."
+readme = "README.md"
+
+[lib]
+path = "src/lib.rs"
