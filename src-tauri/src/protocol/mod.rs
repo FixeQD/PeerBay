@@ -3,11 +3,14 @@
 #![allow(dead_code)]
 
 mod envelope;
+mod errors;
 mod limits;
 mod message_types;
 
 #[allow(unused_imports)]
 pub(crate) use envelope::MessageEnvelope;
+#[allow(unused_imports)]
+pub(crate) use errors::{ProtocolError, ProtocolErrorCode, ProtocolErrorScope};
 #[allow(unused_imports)]
 pub(crate) use limits::{
     DEFAULT_MAX_BATCH_ITEMS, DEFAULT_MAX_FRAME_SIZE, DEFAULT_MAX_JSON_SIZE,
