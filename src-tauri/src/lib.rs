@@ -1,18 +1,20 @@
 mod app;
+mod commands;
+mod events;
 mod features;
 mod identity;
 mod platform;
 mod protocol;
+mod redaction;
 mod session;
 mod storage;
 mod transport;
+mod viewmodel;
 
 use app::AppRuntime;
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use events::{EventName, LifecyclePayload};
+use tauri::Emitter;
+use viewmodel::ViewModelGateway;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,8 +23,14 @@ pub fn run() {
 
     let run_result = tauri::Builder::default()
         .manage(runtime.clone())
+        .manage(ViewModelGateway::new())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .setup(|app| {
+            app.handle()
+                .emit(EventName::AppLifecycle.as_str(), LifecyclePayload::ready())?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![commands::greet])
         .run(tauri::generate_context!());
 
     runtime.shutdown();
