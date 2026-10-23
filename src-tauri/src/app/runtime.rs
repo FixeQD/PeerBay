@@ -97,6 +97,29 @@ mod tests {
     }
 
     #[test]
+    fn headless_runtime_accepts_backend_work_without_webview() {
+        let runtime = AppRuntime::new();
+        let worker_started = Arc::new(AtomicBool::new(false));
+        let worker_started_in_worker = Arc::clone(&worker_started);
+
+        runtime.start().expect("headless runtime should start");
+        runtime
+            .spawn_worker("headless-test-worker", move |context| {
+                worker_started_in_worker.store(true, Ordering::Release);
+                while !context.shutdown_requested() {
+                    thread::yield_now();
+                }
+            })
+            .expect("headless runtime should accept backend work");
+
+        runtime.shutdown();
+
+        assert!(worker_started.load(Ordering::Acquire));
+        assert_eq!(runtime.lifecycle(), LifecycleState::Stopped);
+        assert_eq!(runtime.active_worker_count(), 0);
+    }
+
+    #[test]
     fn runtime_follows_explicit_startup_stages() {
         let runtime = AppRuntime::new();
 
