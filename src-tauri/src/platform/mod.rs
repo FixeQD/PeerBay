@@ -18,3 +18,6 @@ mod linux;
 mod windows;
 
 pub(crate) use capability::PlatformDescriptor;
+
+#[cfg(target_os = "android")]
+pub(crate) use android::AndroidBridgeState;

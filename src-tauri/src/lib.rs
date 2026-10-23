@@ -13,6 +13,8 @@ mod viewmodel;
 
 use app::AppRuntime;
 use events::{EventName, LifecyclePayload};
+#[cfg(target_os = "android")]
+use platform::AndroidBridgeState;
 use platform::PlatformDescriptor;
 use tauri::Emitter;
 use viewmodel::ViewModelGateway;
@@ -22,10 +24,15 @@ pub fn run() {
     let runtime = AppRuntime::new();
     runtime.start().expect("application runtime should start");
 
-    let run_result = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(runtime.clone())
         .manage(PlatformDescriptor::current())
-        .manage(ViewModelGateway::new())
+        .manage(ViewModelGateway::new());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.manage(AndroidBridgeState::new());
+
+    let run_result = builder
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             app.handle()
