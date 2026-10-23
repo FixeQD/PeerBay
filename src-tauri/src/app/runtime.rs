@@ -19,7 +19,10 @@ impl AppRuntime {
     }
 
     pub(crate) fn start(&self) -> Result<(), InvalidTransition> {
-        self.state.transition(LifecycleState::Starting)?;
+        self.state.transition(LifecycleState::LoadingIdentity)?;
+        self.state.transition(LifecycleState::LoadingStore)?;
+        self.state.transition(LifecycleState::StartingPlatform)?;
+        self.state.transition(LifecycleState::StartingDiscovery)?;
         self.state.transition(LifecycleState::Ready)
     }
 
@@ -28,7 +31,11 @@ impl AppRuntime {
             LifecycleState::Created => {
                 let _ = self.state.transition(LifecycleState::ShuttingDown);
             }
-            LifecycleState::Starting | LifecycleState::Ready => {
+            LifecycleState::LoadingIdentity
+            | LifecycleState::LoadingStore
+            | LifecycleState::StartingPlatform
+            | LifecycleState::StartingDiscovery
+            | LifecycleState::Ready => {
                 let _ = self.state.transition(LifecycleState::ShuttingDown);
             }
             LifecycleState::ShuttingDown | LifecycleState::Stopped => {}
@@ -87,6 +94,46 @@ mod tests {
 
         runtime.shutdown();
         assert_eq!(runtime.lifecycle(), LifecycleState::Stopped);
+    }
+
+    #[test]
+    fn runtime_follows_explicit_startup_stages() {
+        let runtime = AppRuntime::new();
+
+        runtime
+            .state
+            .transition(LifecycleState::LoadingIdentity)
+            .expect("identity stage should start");
+        assert_eq!(runtime.lifecycle(), LifecycleState::LoadingIdentity);
+        runtime
+            .state
+            .transition(LifecycleState::LoadingStore)
+            .expect("store stage should start");
+        runtime
+            .state
+            .transition(LifecycleState::StartingPlatform)
+            .expect("platform stage should start");
+        runtime
+            .state
+            .transition(LifecycleState::StartingDiscovery)
+            .expect("discovery stage should start");
+        runtime
+            .state
+            .transition(LifecycleState::Ready)
+            .expect("ready stage should start");
+        assert_eq!(runtime.lifecycle(), LifecycleState::Ready);
+    }
+
+    #[test]
+    fn runtime_rejects_skipping_startup_stages() {
+        let runtime = AppRuntime::new();
+
+        let error = runtime
+            .state
+            .transition(LifecycleState::Ready)
+            .expect_err("runtime must not skip initialization stages");
+        assert_eq!(error.from, LifecycleState::Created);
+        assert_eq!(error.to, LifecycleState::Ready);
     }
 
     #[test]

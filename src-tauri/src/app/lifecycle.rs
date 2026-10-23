@@ -3,7 +3,10 @@ use std::fmt::{Display, Formatter};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LifecycleState {
     Created,
-    Starting,
+    LoadingIdentity,
+    LoadingStore,
+    StartingPlatform,
+    StartingDiscovery,
     Ready,
     ShuttingDown,
     Stopped,
@@ -13,8 +16,20 @@ impl LifecycleState {
     pub(crate) fn can_transition(self, next: Self) -> bool {
         matches!(
             (self, next),
-            (Self::Created, Self::Starting | Self::ShuttingDown)
-                | (Self::Starting, Self::Ready | Self::ShuttingDown)
+            (Self::Created, Self::LoadingIdentity | Self::ShuttingDown)
+                | (
+                    Self::LoadingIdentity,
+                    Self::LoadingStore | Self::ShuttingDown
+                )
+                | (
+                    Self::LoadingStore,
+                    Self::StartingPlatform | Self::ShuttingDown
+                )
+                | (
+                    Self::StartingPlatform,
+                    Self::StartingDiscovery | Self::ShuttingDown
+                )
+                | (Self::StartingDiscovery, Self::Ready | Self::ShuttingDown)
                 | (Self::Ready, Self::ShuttingDown)
                 | (Self::ShuttingDown, Self::Stopped)
         )
