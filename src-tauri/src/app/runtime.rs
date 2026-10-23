@@ -1,0 +1,114 @@
+use std::io;
+use std::sync::Arc;
+
+use super::{AppState, InvalidTransition, LifecycleState, WorkerContext, WorkerSupervisor};
+
+#[derive(Clone)]
+pub(crate) struct AppRuntime {
+    state: Arc<AppState>,
+    workers: Arc<WorkerSupervisor>,
+}
+
+#[allow(dead_code)]
+impl AppRuntime {
+    pub(crate) fn new() -> Self {
+        Self {
+            state: Arc::new(AppState::new()),
+            workers: Arc::new(WorkerSupervisor::new()),
+        }
+    }
+
+    pub(crate) fn start(&self) -> Result<(), InvalidTransition> {
+        self.state.transition(LifecycleState::Starting)?;
+        self.state.transition(LifecycleState::Ready)
+    }
+
+    pub(crate) fn shutdown(&self) {
+        match self.state.lifecycle() {
+            LifecycleState::Created => {
+                let _ = self.state.transition(LifecycleState::ShuttingDown);
+            }
+            LifecycleState::Starting | LifecycleState::Ready => {
+                let _ = self.state.transition(LifecycleState::ShuttingDown);
+            }
+            LifecycleState::ShuttingDown | LifecycleState::Stopped => {}
+        }
+
+        self.workers.shutdown();
+        let _ = self.state.transition(LifecycleState::Stopped);
+    }
+
+    pub(crate) fn lifecycle(&self) -> LifecycleState {
+        self.state.lifecycle()
+    }
+
+    pub(crate) fn spawn_worker<F>(&self, name: &str, worker: F) -> io::Result<()>
+    where
+        F: FnOnce(WorkerContext) + Send + 'static,
+    {
+        if self.lifecycle() != LifecycleState::Ready {
+            return Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "application runtime is not ready",
+            ));
+        }
+
+        self.workers.spawn(name, worker)
+    }
+
+    pub(crate) fn active_worker_count(&self) -> usize {
+        self.workers.active_count()
+    }
+}
+
+impl Default for AppRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::thread;
+
+    use super::*;
+
+    #[test]
+    fn runtime_starts_and_stops_without_webview() {
+        let runtime = AppRuntime::new();
+
+        assert_eq!(runtime.lifecycle(), LifecycleState::Created);
+        runtime.start().expect("runtime should start");
+        assert_eq!(runtime.lifecycle(), LifecycleState::Ready);
+
+        runtime.shutdown();
+        assert_eq!(runtime.lifecycle(), LifecycleState::Stopped);
+    }
+
+    #[test]
+    fn shutdown_requests_workers_and_joins_them() {
+        let runtime = AppRuntime::new();
+        runtime.start().expect("runtime should start");
+        let worker_stopped = Arc::new(AtomicBool::new(false));
+        let worker_stopped_in_worker = Arc::clone(&worker_stopped);
+
+        runtime
+            .spawn_worker("test-worker", move |context| {
+                while !context.shutdown_requested() {
+                    thread::yield_now();
+                }
+                worker_stopped_in_worker.store(true, Ordering::Release);
+            })
+            .expect("worker should start");
+
+        assert_eq!(runtime.active_worker_count(), 1);
+        runtime.shutdown();
+
+        assert!(worker_stopped.load(Ordering::Acquire));
+        assert_eq!(runtime.active_worker_count(), 0);
+    }
+}
