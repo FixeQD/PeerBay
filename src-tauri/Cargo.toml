@@ -19,6 +19,13 @@ linux-wayland = []
 linux-pipewire = []
 linux-bluez = []
 linux-direct-network = []
+linux-all = [
+    "linux-x11",
+    "linux-wayland",
+    "linux-pipewire",
+    "linux-bluez",
+    "linux-direct-network",
+]
 
 # Windows capability adapters.
 windows-win32 = []
