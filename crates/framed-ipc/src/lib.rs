@@ -3,6 +3,8 @@
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read, Write};
 
+use eros::Context;
+
 pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
 const HEADER_SIZE: usize = std::mem::size_of::<u32>();
 
@@ -12,9 +14,9 @@ pub struct FrameLimits {
 }
 
 impl FrameLimits {
-    pub const fn new(max_frame_size: usize) -> Result<Self, FrameError> {
+    pub fn new(max_frame_size: usize) -> eros::Result<Self> {
         if max_frame_size > u32::MAX as usize {
-            return Err(FrameError::InvalidLimit { max_frame_size });
+            return Err(eros::error!(FrameError::InvalidLimit { max_frame_size }));
         }
 
         Ok(Self { max_frame_size })
@@ -83,7 +85,7 @@ impl From<io::Error> for FrameError {
     }
 }
 
-pub fn encode_frame(payload: &[u8], limits: FrameLimits) -> Result<Vec<u8>, FrameError> {
+pub fn encode_frame(payload: &[u8], limits: FrameLimits) -> eros::Result<Vec<u8>> {
     validate_length(payload.len(), limits)?;
 
     let mut frame = Vec::with_capacity(HEADER_SIZE + payload.len());
@@ -96,26 +98,32 @@ pub fn write_frame<W: Write>(
     writer: &mut W,
     payload: &[u8],
     limits: FrameLimits,
-) -> Result<(), FrameError> {
-    let frame = encode_frame(payload, limits)?;
-    writer.write_all(&frame)?;
+) -> eros::Result<()> {
+    let frame = encode_frame(payload, limits).context("encode IPC frame")?;
+    writer
+        .write_all(&frame)
+        .map_err(FrameError::from)
+        .map_err(|error| eros::error!(error).context("write IPC frame"))?;
     Ok(())
 }
 
-pub fn read_frame<R: Read>(reader: &mut R, limits: FrameLimits) -> Result<Vec<u8>, FrameError> {
+pub fn read_frame<R: Read>(reader: &mut R, limits: FrameLimits) -> eros::Result<Vec<u8>> {
     let mut header = [0; HEADER_SIZE];
     let mut header_bytes = 0;
 
     while header_bytes < HEADER_SIZE {
-        let read = reader.read(&mut header[header_bytes..])?;
+        let read = reader
+            .read(&mut header[header_bytes..])
+            .map_err(FrameError::from)
+            .map_err(|error| eros::error!(error).context("read IPC frame header"))?;
         if read == 0 {
             if header_bytes == 0 {
-                return Err(FrameError::Io(io::Error::new(
+                return Err(eros::error!(FrameError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "end of stream",
-                )));
+                ))));
             }
-            return Err(FrameError::TruncatedHeader);
+            return Err(eros::error!(FrameError::TruncatedHeader));
         }
         header_bytes += read;
     }
@@ -126,12 +134,15 @@ pub fn read_frame<R: Read>(reader: &mut R, limits: FrameLimits) -> Result<Vec<u8
     let mut payload = vec![0; length];
     let mut received = 0;
     while received < length {
-        let read = reader.read(&mut payload[received..])?;
+        let read = reader
+            .read(&mut payload[received..])
+            .map_err(FrameError::from)
+            .map_err(|error| eros::error!(error).context("read IPC frame payload"))?;
         if read == 0 {
-            return Err(FrameError::TruncatedPayload {
+            return Err(eros::error!(FrameError::TruncatedPayload {
                 expected: length,
                 received,
-            });
+            }));
         }
         received += read;
     }
@@ -139,12 +150,12 @@ pub fn read_frame<R: Read>(reader: &mut R, limits: FrameLimits) -> Result<Vec<u8
     Ok(payload)
 }
 
-fn validate_length(length: usize, limits: FrameLimits) -> Result<(), FrameError> {
+fn validate_length(length: usize, limits: FrameLimits) -> eros::Result<()> {
     if length > limits.max_frame_size {
-        return Err(FrameError::FrameTooLarge {
+        return Err(eros::error!(FrameError::FrameTooLarge {
             length,
             max: limits.max_frame_size,
-        });
+        }));
     }
     Ok(())
 }
@@ -168,7 +179,10 @@ mod tests {
     #[test]
     fn rejects_frames_over_limit_before_writing() {
         let limits = FrameLimits::new(4).expect("valid limit");
-        let error = encode_frame(b"12345", limits).expect_err("frame must be rejected");
+        let error = encode_frame(b"12345", limits)
+            .expect_err("frame must be rejected")
+            .downcast_inner::<FrameError>()
+            .expect("frame error should be preserved");
         assert!(matches!(
             error,
             FrameError::FrameTooLarge { length: 5, max: 4 }
@@ -179,7 +193,9 @@ mod tests {
     fn rejects_truncated_payload() {
         let limits = FrameLimits::new(16).expect("valid limit");
         let error = read_frame(&mut &[0, 0, 0, 5, b'a'][..], limits)
-            .expect_err("truncated payload must fail");
+            .expect_err("truncated payload must fail")
+            .downcast_inner::<FrameError>()
+            .expect("frame error should be preserved");
         assert!(matches!(
             error,
             FrameError::TruncatedPayload {

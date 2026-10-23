@@ -43,6 +43,7 @@ scrcpy = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+eros.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

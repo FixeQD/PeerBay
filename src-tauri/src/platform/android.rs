@@ -62,27 +62,23 @@ impl AndroidBridgeState {
         }
     }
 
-    pub(crate) fn snapshot(&self) -> AndroidBridgeSnapshot {
-        *self
-            .snapshot
-            .read()
-            .expect("Android bridge state lock poisoned")
+    pub(crate) fn snapshot(&self) -> eros::Result<AndroidBridgeSnapshot> {
+        Ok(*self.snapshot.read().map_err(|_| {
+            eros::error!("Android bridge state lock poisoned").context("read Android bridge state")
+        })?)
     }
 
-    pub(crate) fn transition(
-        &self,
-        next: AndroidHostLifecycle,
-    ) -> Result<(), InvalidAndroidLifecycleTransition> {
-        let mut snapshot = self
-            .snapshot
-            .write()
-            .expect("Android bridge state lock poisoned");
+    pub(crate) fn transition(&self, next: AndroidHostLifecycle) -> eros::Result<()> {
+        let mut snapshot = self.snapshot.write().map_err(|_| {
+            eros::error!("Android bridge state lock poisoned").context("write Android bridge state")
+        })?;
 
         if !snapshot.lifecycle.can_transition(next) {
-            return Err(InvalidAndroidLifecycleTransition {
+            return Err(eros::error!(InvalidAndroidLifecycleTransition {
                 from: snapshot.lifecycle,
                 to: next,
-            });
+            })
+            .context("advance Android host lifecycle"));
         }
 
         snapshot.lifecycle = next;
@@ -103,7 +99,13 @@ mod tests {
     #[test]
     fn bridge_state_tracks_native_host_lifecycle() {
         let state = AndroidBridgeState::new();
-        assert_eq!(state.snapshot().lifecycle, AndroidHostLifecycle::Created);
+        assert_eq!(
+            state
+                .snapshot()
+                .expect("read Android bridge state")
+                .lifecycle,
+            AndroidHostLifecycle::Created
+        );
 
         state
             .transition(AndroidHostLifecycle::Resumed)
@@ -114,7 +116,13 @@ mod tests {
         state
             .transition(AndroidHostLifecycle::Destroyed)
             .expect("paused host should be destroyable");
-        assert_eq!(state.snapshot().lifecycle, AndroidHostLifecycle::Destroyed);
+        assert_eq!(
+            state
+                .snapshot()
+                .expect("read Android bridge state")
+                .lifecycle,
+            AndroidHostLifecycle::Destroyed
+        );
     }
 }
 

@@ -1,4 +1,3 @@
-use std::io;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -33,17 +32,16 @@ impl WorkerSupervisor {
         }
     }
 
-    pub(crate) fn spawn<F>(&self, name: &str, worker: F) -> io::Result<()>
+    pub(crate) fn spawn<F>(&self, name: &str, worker: F) -> eros::Result<()>
     where
         F: FnOnce(WorkerContext) + Send + 'static,
     {
-        let mut handles = self.handles.lock().expect("worker registry lock poisoned");
+        let mut handles = self.handles.lock().map_err(|_| {
+            eros::error!("worker registry lock poisoned").context("register worker")
+        })?;
 
         if self.shutdown_requested.load(Ordering::Acquire) {
-            return Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "application runtime is shutting down",
-            ));
+            return Err(eros::error!("application runtime is shutting down"));
         }
 
         let context = WorkerContext {
@@ -51,30 +49,42 @@ impl WorkerSupervisor {
         };
         let handle = thread::Builder::new()
             .name(name.to_owned())
-            .spawn(move || worker(context))?;
+            .spawn(move || worker(context))
+            .map_err(|error| eros::error!(error).context("spawn worker thread"))?;
 
         handles.push(handle);
         Ok(())
     }
 
-    pub(crate) fn active_count(&self) -> usize {
+    pub(crate) fn active_count(&self) -> eros::Result<usize> {
         self.handles
             .lock()
-            .expect("worker registry lock poisoned")
-            .len()
+            .map(|handles| handles.len())
+            .map_err(|_| eros::error!("worker registry lock poisoned").context("count workers"))
     }
 
-    pub(crate) fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) -> eros::Result<()> {
         self.shutdown_requested.store(true, Ordering::Release);
 
         let handles = {
-            let mut handles = self.handles.lock().expect("worker registry lock poisoned");
+            let mut handles = self.handles.lock().map_err(|_| {
+                eros::error!("worker registry lock poisoned").context("stop workers")
+            })?;
             std::mem::take(&mut *handles)
         };
 
+        let mut worker_panicked = false;
         for handle in handles {
-            let _ = handle.join();
+            if handle.join().is_err() {
+                worker_panicked = true;
+            }
         }
+
+        if worker_panicked {
+            return Err(eros::error!("application worker panicked").context("join workers"));
+        }
+
+        Ok(())
     }
 }
 

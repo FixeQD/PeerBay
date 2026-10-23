@@ -100,7 +100,7 @@ impl SurfaceLifecycle {
         self.state
     }
 
-    pub fn apply(&mut self, command: SurfaceCommand) -> Result<(), SurfaceError> {
+    pub fn apply(&mut self, command: SurfaceCommand) -> eros::Result<()> {
         match (self.state, command) {
             (SurfaceState::Created, SurfaceCommand::Show)
             | (SurfaceState::Hidden, SurfaceCommand::Show) => {
@@ -123,10 +123,10 @@ impl SurfaceLifecycle {
                 self.state = SurfaceState::Destroyed;
             }
             _ => {
-                return Err(SurfaceError::InvalidTransition {
+                return Err(eros::error!(SurfaceError::InvalidTransition {
                     state: self.state,
                     command,
-                });
+                }));
             }
         }
 

@@ -12,6 +12,7 @@ mod transport;
 mod viewmodel;
 
 use app::AppRuntime;
+use eros::Context;
 use events::{EventName, LifecyclePayload};
 #[cfg(target_os = "android")]
 use platform::AndroidBridgeState;
@@ -21,8 +22,15 @@ use viewmodel::ViewModelGateway;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Err(error) = run_result() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}
+
+fn run_result() -> eros::Result<()> {
     let runtime = AppRuntime::new();
-    runtime.start().expect("application runtime should start");
+    runtime.start().context("start application runtime")?;
 
     let builder = tauri::Builder::default()
         .manage(runtime.clone())
@@ -42,6 +50,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![commands::greet])
         .run(tauri::generate_context!());
 
-    runtime.shutdown();
-    run_result.expect("error while running tauri application");
+    run_result.map_err(|error| eros::error!(error).context("run Tauri application"))?;
+    runtime.shutdown().context("shutdown application runtime")?;
+    Ok(())
 }
