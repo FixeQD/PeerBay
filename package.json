@@ -14,7 +14,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:android": "tauri android"
+    "tauri:android": "tauri android",
+    "tauri:android:build": "tauri android build --target aarch64 x86_64 --split-per-abi --apk --aab"
   },
   "license": "GPL-3.0-or-later",
   "dependencies": {
