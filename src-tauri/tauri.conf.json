@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "peerbay",
+  "productName": "PeerBay",
   "version": "0.1.0",
   "identifier": "com.fixeq.peerbay",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "peerbay",
+        "title": "PeerBay",
         "width": 800,
         "height": 600
       }
