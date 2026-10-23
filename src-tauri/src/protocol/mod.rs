@@ -8,6 +8,9 @@ mod json_framing;
 mod limits;
 mod message_types;
 
+#[cfg(test)]
+mod roundtrip_vectors;
+
 #[allow(unused_imports)]
 pub(crate) use envelope::MessageEnvelope;
 #[allow(unused_imports)]
