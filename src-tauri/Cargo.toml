@@ -10,6 +10,28 @@ license = "GPL-3.0-or-later"
 name = "peerbay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+
+# Linux capability adapters.
+linux-x11 = []
+linux-wayland = []
+linux-pipewire = []
+linux-bluez = []
+linux-direct-network = []
+
+# Windows capability adapters.
+windows-win32 = []
+windows-winrt = []
+windows-wifi-direct = []
+
+# Android native bridges and optional feature backends.
+android-jni = []
+android-services = []
+media = []
+adb = []
+scrcpy = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

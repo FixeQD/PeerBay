@@ -13,6 +13,7 @@ mod viewmodel;
 
 use app::AppRuntime;
 use events::{EventName, LifecyclePayload};
+use platform::PlatformDescriptor;
 use tauri::Emitter;
 use viewmodel::ViewModelGateway;
 
@@ -23,6 +24,7 @@ pub fn run() {
 
     let run_result = tauri::Builder::default()
         .manage(runtime.clone())
+        .manage(PlatformDescriptor::current())
         .manage(ViewModelGateway::new())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
