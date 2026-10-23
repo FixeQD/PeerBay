@@ -2458,6 +2458,7 @@ name = "peerbay"
 version = "0.1.0"
 dependencies = [
  "eros",
+ "framed-ipc",
  "serde",
  "serde_json",
  "tauri",
