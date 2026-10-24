@@ -8,6 +8,7 @@ pub mod errors;
 pub mod json_framing;
 pub mod limits;
 pub mod message_types;
+pub mod policy;
 pub mod sequence;
 
 pub use capabilities::{CapabilityDocument, CapabilityError, NegotiatedCapabilities};
@@ -21,6 +22,10 @@ pub use limits::{
 pub use message_types::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
     MessageChannel, MessageType, PairingMessageType,
+};
+pub use policy::{
+    FeaturePolicy, PolicyError, PolicyGetRequest, PolicyGetResponse, PolicyRejection,
+    PolicyRejectionReason, PolicySetRequest, PolicySetResponse, UserPolicyState,
 };
 pub use sequence::{SequenceError, SequenceTracker};
 

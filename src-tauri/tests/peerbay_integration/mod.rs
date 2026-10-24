@@ -8,6 +8,7 @@ mod protocol_json_framing;
 mod protocol_limits;
 mod protocol_malformed_vectors;
 mod protocol_message_types;
+mod protocol_policy;
 mod protocol_roundtrip_vectors;
 mod protocol_sequence;
 mod redaction;
