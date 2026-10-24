@@ -11,6 +11,7 @@ pub enum MessageChannel {
     Files,
     Input,
     Media,
+    Phone,
     Unknown,
 }
 
@@ -98,6 +99,14 @@ pub enum MediaMessageType {
     AudioState,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhoneMessageType {
+    PrivilegeState,
+    PrivilegeRequest,
+    PrivilegeCancel,
+    PrivilegeCapabilities,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MessageType {
     Control(ControlMessageType),
@@ -106,6 +115,7 @@ pub enum MessageType {
     Files(FileMessageType),
     Input(InputMessageType),
     Media(MediaMessageType),
+    Phone(PhoneMessageType),
     Unknown(String),
 }
 
@@ -118,6 +128,7 @@ impl MessageType {
             Self::Files(_) => MessageChannel::Files,
             Self::Input(_) => MessageChannel::Input,
             Self::Media(_) => MessageChannel::Media,
+            Self::Phone(_) => MessageChannel::Phone,
             Self::Unknown(_) => MessageChannel::Unknown,
         }
     }
@@ -130,6 +141,7 @@ impl MessageType {
             Self::Files(message) => message.as_str(),
             Self::Input(message) => message.as_str(),
             Self::Media(message) => message.as_str(),
+            Self::Phone(message) => message.as_str(),
             Self::Unknown(message) => message,
         }
     }
@@ -196,6 +208,10 @@ impl MessageType {
             "audio.ice" => Self::Media(MediaMessageType::AudioIce),
             "audio.stop" => Self::Media(MediaMessageType::AudioStop),
             "audio.state" => Self::Media(MediaMessageType::AudioState),
+            "phone.privilege.state" => Self::Phone(PhoneMessageType::PrivilegeState),
+            "phone.privilege.request" => Self::Phone(PhoneMessageType::PrivilegeRequest),
+            "phone.privilege.cancel" => Self::Phone(PhoneMessageType::PrivilegeCancel),
+            "phone.privilege.capabilities" => Self::Phone(PhoneMessageType::PrivilegeCapabilities),
             _ => Self::Unknown(value),
         }
     }
@@ -311,4 +327,11 @@ message_type_strings!(MediaMessageType, {
     AudioIce => "audio.ice",
     AudioStop => "audio.stop",
     AudioState => "audio.state",
+});
+
+message_type_strings!(PhoneMessageType, {
+    PrivilegeState => "phone.privilege.state",
+    PrivilegeRequest => "phone.privilege.request",
+    PrivilegeCancel => "phone.privilege.cancel",
+    PrivilegeCapabilities => "phone.privilege.capabilities",
 });

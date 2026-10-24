@@ -1,6 +1,6 @@
 use peerbay_lib::protocol::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
-    MessageChannel, MessageType, PairingMessageType,
+    MessageChannel, MessageType, PairingMessageType, PhoneMessageType,
 };
 
 #[test]
@@ -35,6 +35,11 @@ fn known_identifiers_keep_their_channel_and_wire_name() {
             MessageType::Media(MediaMessageType::ScreenState),
             MessageChannel::Media,
             "screen.state",
+        ),
+        (
+            MessageType::Phone(PhoneMessageType::PrivilegeCapabilities),
+            MessageChannel::Phone,
+            "phone.privilege.capabilities",
         ),
     ];
 

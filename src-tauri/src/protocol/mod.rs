@@ -10,6 +10,7 @@ pub mod limits;
 pub mod message_types;
 pub mod pairing;
 pub mod policy;
+pub mod privilege;
 pub mod resume;
 pub mod sequence;
 
@@ -23,7 +24,7 @@ pub use limits::{
 };
 pub use message_types::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
-    MessageChannel, MessageType, PairingMessageType,
+    MessageChannel, MessageType, PairingMessageType, PhoneMessageType,
 };
 pub use pairing::{
     PairingAccepted, PairingCancellationReason, PairingCancelled, PairingCode, PairingCommit,
@@ -33,6 +34,11 @@ pub use pairing::{
 pub use policy::{
     FeaturePolicy, PolicyError, PolicyGetRequest, PolicyGetResponse, PolicyRejection,
     PolicyRejectionReason, PolicySetRequest, PolicySetResponse, UserPolicyState,
+};
+pub use privilege::{
+    PrivilegeAdbTransport, PrivilegeAuthority, PrivilegeBackendSnapshot, PrivilegeCancelRequest,
+    PrivilegeCancellationReason, PrivilegeCapabilities, PrivilegeDecision, PrivilegeError,
+    PrivilegeProof, PrivilegeProvider, PrivilegeRequest, PrivilegeState, PrivilegeStateMessage,
 };
 pub use resume::{
     ChannelMigration, ChannelResumeCursor, ResumeError, ResumeKey, ResumeRejectionReason,

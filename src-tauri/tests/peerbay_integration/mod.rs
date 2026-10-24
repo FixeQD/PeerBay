@@ -10,6 +10,7 @@ mod protocol_malformed_vectors;
 mod protocol_message_types;
 mod protocol_pairing;
 mod protocol_policy;
+mod protocol_privilege;
 mod protocol_resume;
 mod protocol_roundtrip_vectors;
 mod protocol_sequence;

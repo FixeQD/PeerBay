@@ -1,7 +1,7 @@
 use peerbay_lib::protocol::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
-    MessageChannel, MessageEnvelope, MessageType, PairingMessageType, ProtocolLimitError,
-    ProtocolLimits, SequenceError, SequenceTracker,
+    MessageChannel, MessageEnvelope, MessageType, PairingMessageType, PhoneMessageType,
+    ProtocolLimitError, ProtocolLimits, SequenceError, SequenceTracker,
 };
 
 fn control_message(session_id: &str, seq: u64, timestamp_ms: u64) -> MessageEnvelope<()> {
@@ -385,6 +385,10 @@ fn every_known_channel_accepts_its_first_sequence_independently() {
             MessageType::Media(MediaMessageType::ScreenState),
             MessageChannel::Media,
         ),
+        (
+            MessageType::Phone(PhoneMessageType::PrivilegeState),
+            MessageChannel::Phone,
+        ),
     ];
 
     for (index, (message_type, channel)) in messages.into_iter().enumerate() {
@@ -557,6 +561,7 @@ fn unseen_channels_have_no_high_water_mark() {
     assert_eq!(tracker.last_accepted(MessageChannel::Files), None);
     assert_eq!(tracker.last_accepted(MessageChannel::Input), None);
     assert_eq!(tracker.last_accepted(MessageChannel::Media), None);
+    assert_eq!(tracker.last_accepted(MessageChannel::Phone), None);
     assert_eq!(tracker.last_accepted(MessageChannel::Unknown), None);
 }
 
