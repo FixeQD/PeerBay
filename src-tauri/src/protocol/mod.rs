@@ -9,6 +9,9 @@ mod limits;
 mod message_types;
 
 #[cfg(test)]
+mod malformed_vectors;
+
+#[cfg(test)]
 mod roundtrip_vectors;
 
 #[allow(unused_imports)]

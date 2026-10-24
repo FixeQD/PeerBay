@@ -79,6 +79,12 @@ impl ProtocolLimits {
     }
 
     pub(crate) fn validate_string(self, field: &'static str, value: &str) -> eros::Result<()> {
+        if value.trim().is_empty() {
+            return Err(eros::error!(ProtocolLimitError::InvalidIdentifier {
+                field
+            }));
+        }
+
         let length = value.len();
         if length > self.max_string_length {
             return Err(eros::error!(ProtocolLimitError::StringTooLong {
@@ -157,6 +163,9 @@ pub(crate) enum ProtocolLimitError {
         size: usize,
         max: usize,
     },
+    InvalidIdentifier {
+        field: &'static str,
+    },
 }
 
 impl Display for ProtocolLimitError {
@@ -186,6 +195,9 @@ impl Display for ProtocolLimitError {
                 formatter,
                 "protocol payload is too large: {size} bytes, limit is {max}"
             ),
+            Self::InvalidIdentifier { field } => {
+                write!(formatter, "protocol identifier {field} must not be empty")
+            }
         }
     }
 }
