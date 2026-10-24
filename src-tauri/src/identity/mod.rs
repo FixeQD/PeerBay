@@ -1,12 +1,17 @@
 //! Local device identity boundary.
 
 use std::env;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
+use ed25519_dalek::SigningKey;
+use rand::rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
+use zeroize::{Zeroize, Zeroizing};
 
 pub const MAX_DEVICE_NAME_LENGTH: usize = 128;
+pub const IDENTITY_PRIVATE_KEY_LENGTH: usize = 32;
+pub const IDENTITY_PUBLIC_KEY_LENGTH: usize = 32;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceIdentity {
@@ -141,6 +146,162 @@ impl Display for DeviceIdentityError {
 }
 
 impl std::error::Error for DeviceIdentityError {}
+
+pub struct IdentityKeyPair {
+    private_key: Zeroizing<[u8; IDENTITY_PRIVATE_KEY_LENGTH]>,
+    public_key: [u8; IDENTITY_PUBLIC_KEY_LENGTH],
+}
+
+impl IdentityKeyPair {
+    pub fn generate() -> Self {
+        let signing_key = SigningKey::generate(&mut rng());
+        Self::from_private_bytes(signing_key.to_bytes())
+    }
+
+    pub fn from_private_bytes(private_key: [u8; IDENTITY_PRIVATE_KEY_LENGTH]) -> Self {
+        let signing_key = SigningKey::from_bytes(&private_key);
+        let public_key = signing_key.verifying_key().to_bytes();
+
+        Self {
+            private_key: Zeroizing::new(private_key),
+            public_key,
+        }
+    }
+
+    pub fn public_key_bytes(&self) -> [u8; IDENTITY_PUBLIC_KEY_LENGTH] {
+        self.public_key
+    }
+
+    pub fn with_private_key<R>(
+        &self,
+        callback: impl FnOnce(&[u8; IDENTITY_PRIVATE_KEY_LENGTH]) -> R,
+    ) -> R {
+        callback(&self.private_key)
+    }
+
+    pub fn private_key_bytes(&self) -> PrivateKeyBytes {
+        PrivateKeyBytes(self.private_key.clone())
+    }
+
+    pub fn validate(&self) -> eros::Result<()> {
+        let signing_key = SigningKey::from_bytes(&self.private_key);
+        if signing_key.verifying_key().to_bytes() != self.public_key {
+            return Err(eros::error!(IdentityKeyPairError::PublicKeyMismatch));
+        }
+
+        Ok(())
+    }
+}
+
+impl Debug for IdentityKeyPair {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("IdentityKeyPair")
+            .field("private_key", &"<redacted>")
+            .field("public_key", &"<redacted>")
+            .finish()
+    }
+}
+
+impl Drop for IdentityKeyPair {
+    fn drop(&mut self) {
+        self.public_key.zeroize();
+    }
+}
+
+pub struct PrivateKeyBytes(Zeroizing<[u8; IDENTITY_PRIVATE_KEY_LENGTH]>);
+
+impl PrivateKeyBytes {
+    pub fn as_bytes(&self) -> &[u8; IDENTITY_PRIVATE_KEY_LENGTH] {
+        &self.0
+    }
+}
+
+impl Debug for PrivateKeyBytes {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("PrivateKeyBytes(<redacted>)")
+    }
+}
+
+impl Drop for PrivateKeyBytes {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+#[derive(Default)]
+pub struct IdentityKeyStore {
+    keypair: Option<IdentityKeyPair>,
+}
+
+impl IdentityKeyStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn generated() -> Self {
+        let mut store = Self::new();
+        store.save(IdentityKeyPair::generate());
+        store
+    }
+
+    pub fn save(&mut self, keypair: IdentityKeyPair) {
+        self.keypair = Some(keypair);
+    }
+
+    pub fn load(&self) -> eros::Result<&IdentityKeyPair> {
+        self.keypair
+            .as_ref()
+            .ok_or_else(|| eros::error!(IdentityKeyStoreError::MissingKeyPair))
+    }
+
+    pub fn take(&mut self) -> Option<IdentityKeyPair> {
+        self.keypair.take()
+    }
+
+    pub fn clear(&mut self) {
+        self.keypair.take();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keypair.is_none()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum IdentityKeyPairError {
+    PublicKeyMismatch,
+}
+
+impl Display for IdentityKeyPairError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PublicKeyMismatch => {
+                write!(
+                    formatter,
+                    "identity keypair public key does not match private key"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for IdentityKeyPairError {}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum IdentityKeyStoreError {
+    MissingKeyPair,
+}
+
+impl Display for IdentityKeyStoreError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingKeyPair => write!(formatter, "identity keypair is not available"),
+        }
+    }
+}
+
+impl std::error::Error for IdentityKeyStoreError {}
 
 fn validate_device_id(value: &str) -> eros::Result<()> {
     if value.trim().is_empty() {

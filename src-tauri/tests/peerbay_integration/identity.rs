@@ -1,16 +1,32 @@
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
+use std::thread;
+
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde_json::json;
 use uuid::Uuid;
 
 use peerbay_lib::app::AppRuntime;
-use peerbay_lib::identity::{DeviceIdentity, DeviceIdentityError, MAX_DEVICE_NAME_LENGTH};
+use peerbay_lib::identity::{
+    DeviceIdentity, DeviceIdentityError, IdentityKeyPair, IdentityKeyPairError, IdentityKeyStore,
+    IdentityKeyStoreError, MAX_DEVICE_NAME_LENGTH,
+};
 
 const DEVICE_ID: &str = "123e4567-e89b-12d3-a456-426614174000";
+const PRIVATE_KEY_BYTES: [u8; 32] = [7; 32];
 
 fn identity_error(result: eros::Result<()>) -> DeviceIdentityError {
     result
         .expect_err("identity validation should fail")
         .downcast_inner::<DeviceIdentityError>()
         .expect("identity error should be preserved")
+}
+
+fn key_store_error(result: eros::Result<()>) -> IdentityKeyStoreError {
+    result
+        .expect_err("key store operation should fail")
+        .downcast_inner::<IdentityKeyStoreError>()
+        .expect("key store error should be preserved")
 }
 
 #[test]
@@ -371,4 +387,368 @@ fn app_runtime_keeps_one_identity_across_clones_and_startup() {
     assert_eq!(before_start, after_start);
     assert_eq!(clone.identity(), before_start);
     runtime.shutdown().expect("runtime should shut down");
+}
+
+#[test]
+fn generated_identity_keypair_has_a_valid_ed25519_public_key() {
+    let keypair = IdentityKeyPair::generate();
+
+    keypair
+        .validate()
+        .expect("generated keypair should validate");
+    assert_eq!(keypair.public_key_bytes().len(), 32);
+    assert!(!format!("{keypair:?}").contains("[7, 7, 7"));
+}
+
+#[test]
+fn generated_identity_keypairs_are_distinct() {
+    let first = IdentityKeyPair::generate();
+    let second = IdentityKeyPair::generate();
+
+    assert_ne!(first.public_key_bytes(), second.public_key_bytes());
+}
+
+#[test]
+fn private_bytes_reconstruct_the_same_public_key_deterministically() {
+    let first = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let second = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+
+    assert_eq!(first.public_key_bytes(), second.public_key_bytes());
+    first.validate().expect("first keypair should validate");
+    second.validate().expect("second keypair should validate");
+}
+
+#[test]
+fn private_key_callback_can_sign_but_does_not_return_a_persistent_reference() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let message = b"peerbay identity proof";
+    let signature_bytes = keypair.with_private_key(|private_bytes| {
+        let signing_key = SigningKey::from_bytes(private_bytes);
+        signing_key.sign(message).to_bytes()
+    });
+    let verifying_key = VerifyingKey::from_bytes(&keypair.public_key_bytes())
+        .expect("public key bytes should form a verifying key");
+    let signature = Signature::from_bytes(&signature_bytes);
+
+    verifying_key
+        .verify(message, &signature)
+        .expect("signature made from private key should verify");
+}
+
+#[test]
+fn private_key_debug_output_is_redacted_and_not_serialized() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let private_bytes = keypair.private_key_bytes();
+    let debug = format!("{keypair:?} {:?}", private_bytes);
+
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains("7, 7, 7"));
+    assert!(!debug.contains("private_key_bytes"));
+}
+
+#[test]
+fn identity_key_store_starts_empty_and_reports_a_safe_error() {
+    let store = IdentityKeyStore::new();
+
+    assert!(store.is_empty());
+    assert_eq!(
+        key_store_error(store.load().map(|_| ())),
+        IdentityKeyStoreError::MissingKeyPair
+    );
+}
+
+#[test]
+fn identity_key_store_saves_reads_takes_and_clears_without_serializing_secrets() {
+    let mut store = IdentityKeyStore::new();
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let expected_public_key = keypair.public_key_bytes();
+
+    store.save(keypair);
+    assert!(!store.is_empty());
+    assert_eq!(
+        store.load().unwrap().public_key_bytes(),
+        expected_public_key
+    );
+    assert!(format!("{:?}", store.load().unwrap()).contains("<redacted>"));
+
+    let taken = store.take().expect("stored keypair should be takeable");
+    assert_eq!(taken.public_key_bytes(), expected_public_key);
+    assert!(store.is_empty());
+
+    store.save(IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES));
+    store.clear();
+    assert!(store.is_empty());
+}
+
+#[test]
+fn identity_key_store_replacing_a_keypair_exposes_only_the_new_public_key() {
+    let mut store = IdentityKeyStore::generated();
+    let replacement = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let expected_public_key = replacement.public_key_bytes();
+
+    store.save(replacement);
+
+    assert_eq!(
+        store.load().unwrap().public_key_bytes(),
+        expected_public_key
+    );
+}
+
+#[test]
+fn runtime_owns_keypair_across_clones_and_startup() {
+    let runtime = AppRuntime::new();
+    let clone = runtime.clone();
+    let before_start = runtime.identity_public_key().expect("read public key");
+
+    runtime.start().expect("runtime should start");
+    assert_eq!(runtime.identity_public_key().unwrap(), before_start);
+    assert_eq!(clone.identity_public_key().unwrap(), before_start);
+    runtime.shutdown().expect("runtime should shut down");
+}
+
+#[test]
+fn runtime_private_key_callback_matches_runtime_public_key() {
+    let runtime = AppRuntime::new();
+    let message = b"runtime identity proof";
+    let signature_bytes = runtime
+        .with_identity_private_key(|private_bytes| {
+            SigningKey::from_bytes(private_bytes)
+                .sign(message)
+                .to_bytes()
+        })
+        .expect("private key callback should work");
+    let verifying_key = VerifyingKey::from_bytes(&runtime.identity_public_key().unwrap())
+        .expect("runtime public key should be valid");
+
+    verifying_key
+        .verify(message, &Signature::from_bytes(&signature_bytes))
+        .expect("runtime keypair should verify its own signatures");
+}
+
+#[test]
+fn runtime_can_replace_and_clear_keypair_without_affecting_device_identity() {
+    let runtime = AppRuntime::new();
+    let device_id = runtime.identity().device_id().to_owned();
+    let replacement = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let expected_public_key = replacement.public_key_bytes();
+
+    runtime
+        .replace_identity_keypair(replacement)
+        .expect("replacement should be stored");
+    assert_eq!(runtime.identity_public_key().unwrap(), expected_public_key);
+    assert_eq!(runtime.identity().device_id(), device_id);
+
+    runtime
+        .clear_identity_keypair()
+        .expect("keypair should be clearable");
+    assert_eq!(
+        key_store_error(runtime.identity_public_key().map(|_| ())),
+        IdentityKeyStoreError::MissingKeyPair
+    );
+    assert_eq!(runtime.identity().device_id(), device_id);
+}
+
+#[test]
+fn identity_keypair_rejects_no_mutation_of_public_material_via_private_callback() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let before = keypair.public_key_bytes();
+
+    keypair.with_private_key(|private_bytes| {
+        assert_eq!(private_bytes, &PRIVATE_KEY_BYTES);
+    });
+
+    assert_eq!(keypair.public_key_bytes(), before);
+    keypair.validate().expect("keypair should remain valid");
+}
+
+#[test]
+fn identity_keypair_error_does_not_echo_private_bytes() {
+    let error = IdentityKeyPairError::PublicKeyMismatch.to_string();
+
+    assert!(!error.contains("7"));
+    assert!(!error.contains(&format!("{:?}", PRIVATE_KEY_BYTES)));
+}
+
+#[test]
+fn private_key_bytes_are_an_owned_zeroizing_copy_not_an_alias() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let private_bytes = keypair.private_key_bytes();
+    let mut copied_bytes = *private_bytes.as_bytes();
+
+    assert_eq!(copied_bytes, PRIVATE_KEY_BYTES);
+    copied_bytes[0] ^= 0xff;
+
+    assert_ne!(copied_bytes, PRIVATE_KEY_BYTES);
+    keypair.with_private_key(|original| assert_eq!(original, &PRIVATE_KEY_BYTES));
+    keypair
+        .validate()
+        .expect("mutating the copy must not corrupt keypair");
+}
+
+#[test]
+fn keypair_accepts_binary_private_material_without_text_or_shell_interpretation() {
+    let private_bytes = [
+        0, 1, 2, 9, 10, 13, 27, 36, 59, 60, 62, 96, 124, 127, 128, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8,
+        9, 10, 11, 12, 13, 14, 15,
+    ];
+    let keypair = IdentityKeyPair::from_private_bytes(private_bytes);
+    let canary = format!("/tmp/peerbay-keypair-rce-{}", Uuid::new_v4().simple());
+
+    keypair
+        .validate()
+        .expect("arbitrary seed bytes should remain binary data");
+    keypair.with_private_key(|bytes| assert_eq!(bytes, &private_bytes));
+    assert!(!std::path::Path::new(&canary).exists());
+}
+
+#[test]
+fn all_zero_and_all_ff_private_seeds_are_valid_but_produce_distinct_keys() {
+    let zero = IdentityKeyPair::from_private_bytes([0; 32]);
+    let ff = IdentityKeyPair::from_private_bytes([0xff; 32]);
+
+    zero.validate()
+        .expect("zero seed is still a valid Ed25519 seed");
+    ff.validate()
+        .expect("ff seed is still a valid Ed25519 seed");
+    assert_ne!(zero.public_key_bytes(), ff.public_key_bytes());
+}
+
+#[test]
+fn deterministic_ed25519_signatures_verify_and_reject_modified_messages_or_signatures() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let message = b"identity message";
+    let altered_message = b"identity messagE";
+    let signature_bytes =
+        keypair.with_private_key(|bytes| SigningKey::from_bytes(bytes).sign(message).to_bytes());
+    let signature = Signature::from_bytes(&signature_bytes);
+    let verifying_key =
+        VerifyingKey::from_bytes(&keypair.public_key_bytes()).expect("public key should be valid");
+
+    verifying_key
+        .verify(message, &signature)
+        .expect("original signature should verify");
+    assert!(verifying_key.verify(altered_message, &signature).is_err());
+
+    let mut altered_signature_bytes = signature_bytes;
+    altered_signature_bytes[0] ^= 0x01;
+    assert!(
+        verifying_key
+            .verify(message, &Signature::from_bytes(&altered_signature_bytes))
+            .is_err()
+    );
+}
+
+#[test]
+fn callback_panic_does_not_leave_the_keypair_invalid() {
+    let keypair = IdentityKeyPair::from_private_bytes(PRIVATE_KEY_BYTES);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        keypair.with_private_key(|bytes| {
+            assert_eq!(bytes, &PRIVATE_KEY_BYTES);
+            panic!("simulated storage adapter panic");
+        });
+    }));
+
+    assert!(result.is_err());
+    keypair.validate().expect("panic must not corrupt keypair");
+    keypair.with_private_key(|bytes| assert_eq!(bytes, &PRIVATE_KEY_BYTES));
+}
+
+#[test]
+fn key_store_repeated_save_clear_cycles_do_not_leave_a_stale_key_available() {
+    let mut store = IdentityKeyStore::new();
+
+    for value in 0u8..32 {
+        let mut private_bytes = [0u8; 32];
+        private_bytes.fill(value);
+        store.save(IdentityKeyPair::from_private_bytes(private_bytes));
+        assert!(store.load().is_ok());
+        store.clear();
+        assert!(store.is_empty());
+        assert_eq!(
+            key_store_error(store.load().map(|_| ())),
+            IdentityKeyStoreError::MissingKeyPair
+        );
+    }
+}
+
+#[test]
+fn runtime_clear_makes_both_public_and_private_reads_fail_without_changing_device_id() {
+    let runtime = AppRuntime::new();
+    let device_id = runtime.identity().device_id().to_owned();
+
+    runtime
+        .clear_identity_keypair()
+        .expect("runtime keypair should clear");
+    assert_eq!(
+        key_store_error(runtime.identity_public_key().map(|_| ())),
+        IdentityKeyStoreError::MissingKeyPair
+    );
+    assert_eq!(
+        key_store_error(runtime.with_identity_private_key(|_| ())),
+        IdentityKeyStoreError::MissingKeyPair
+    );
+    assert_eq!(runtime.identity().device_id(), device_id);
+}
+
+#[test]
+fn runtime_concurrent_read_replace_and_clear_operations_do_not_panic_or_expose_invalid_lengths() {
+    let runtime = Arc::new(AppRuntime::new());
+    let mut handles = Vec::new();
+
+    for reader_id in 0..6 {
+        let runtime = Arc::clone(&runtime);
+        handles.push(thread::spawn(move || {
+            for iteration in 0..200 {
+                if let Ok(public_key) = runtime.identity_public_key() {
+                    assert_eq!(public_key.len(), 32);
+                }
+                if let Ok(private_key) = runtime.with_identity_private_key(|bytes| *bytes) {
+                    assert_eq!(private_key.len(), 32);
+                }
+                if reader_id == 0 && iteration % 37 == 0 {
+                    thread::yield_now();
+                }
+            }
+        }));
+    }
+
+    let writer_runtime = Arc::clone(&runtime);
+    handles.push(thread::spawn(move || {
+        for iteration in 0u8..100 {
+            let mut private_bytes = [0u8; 32];
+            private_bytes.fill(iteration);
+            writer_runtime
+                .replace_identity_keypair(IdentityKeyPair::from_private_bytes(private_bytes))
+                .expect("replacement should not fail");
+            if iteration % 11 == 0 {
+                writer_runtime
+                    .clear_identity_keypair()
+                    .expect("clear should not fail");
+            }
+        }
+    }));
+
+    for handle in handles {
+        handle
+            .join()
+            .expect("concurrent key operations must not panic");
+    }
+
+    let _ = runtime.identity_public_key();
+}
+
+#[test]
+fn missing_key_errors_do_not_include_paths_commands_or_private_material() {
+    let store = IdentityKeyStore::new();
+    let error = store
+        .load()
+        .expect_err("empty store should fail")
+        .to_string();
+
+    for forbidden in ["private_key", "secret", "/tmp", "$(id)", "touch", "sh"] {
+        assert!(
+            !error.contains(forbidden),
+            "error leaked forbidden text: {forbidden}"
+        );
+    }
 }

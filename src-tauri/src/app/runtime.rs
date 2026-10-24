@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use eros::Context;
 
-use crate::identity::DeviceIdentity;
+use crate::identity::{DeviceIdentity, IdentityKeyPair, IdentityKeyStore};
 
 use super::{AppState, LifecycleState, WorkerContext, WorkerSupervisor};
 
@@ -11,6 +11,7 @@ pub struct AppRuntime {
     state: Arc<AppState>,
     workers: Arc<WorkerSupervisor>,
     identity: Arc<DeviceIdentity>,
+    identity_keys: Arc<RwLock<IdentityKeyStore>>,
 }
 
 #[allow(dead_code)]
@@ -20,11 +21,45 @@ impl AppRuntime {
             state: Arc::new(AppState::new()),
             workers: Arc::new(WorkerSupervisor::new()),
             identity: Arc::new(DeviceIdentity::generate()),
+            identity_keys: Arc::new(RwLock::new(IdentityKeyStore::generated())),
         }
     }
 
     pub fn identity(&self) -> DeviceIdentity {
         self.identity.as_ref().clone()
+    }
+
+    pub fn identity_public_key(&self) -> eros::Result<[u8; 32]> {
+        let store = self.identity_keys.read().map_err(|_| {
+            eros::error!("identity key store lock poisoned").context("read identity key store")
+        })?;
+        Ok(store.load()?.public_key_bytes())
+    }
+
+    pub fn with_identity_private_key<R>(
+        &self,
+        callback: impl FnOnce(&[u8; 32]) -> R,
+    ) -> eros::Result<R> {
+        let store = self.identity_keys.read().map_err(|_| {
+            eros::error!("identity key store lock poisoned").context("read identity key store")
+        })?;
+        Ok(store.load()?.with_private_key(callback))
+    }
+
+    pub fn replace_identity_keypair(&self, keypair: IdentityKeyPair) -> eros::Result<()> {
+        let mut store = self.identity_keys.write().map_err(|_| {
+            eros::error!("identity key store lock poisoned").context("write identity key store")
+        })?;
+        store.save(keypair);
+        Ok(())
+    }
+
+    pub fn clear_identity_keypair(&self) -> eros::Result<()> {
+        let mut store = self.identity_keys.write().map_err(|_| {
+            eros::error!("identity key store lock poisoned").context("write identity key store")
+        })?;
+        store.clear();
+        Ok(())
     }
 
     pub fn start(&self) -> eros::Result<()> {
