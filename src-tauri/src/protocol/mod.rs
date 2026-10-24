@@ -8,6 +8,7 @@ pub mod errors;
 pub mod json_framing;
 pub mod limits;
 pub mod message_types;
+pub mod pairing;
 pub mod policy;
 pub mod sequence;
 
@@ -22,6 +23,11 @@ pub use limits::{
 pub use message_types::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
     MessageChannel, MessageType, PairingMessageType,
+};
+pub use pairing::{
+    PairingAccepted, PairingCancellationReason, PairingCancelled, PairingCode, PairingCommit,
+    PairingConfirm, PairingError, PairingNonce, PairingRejected, PairingRejectionReason,
+    PairingReveal, PairingStart,
 };
 pub use policy::{
     FeaturePolicy, PolicyError, PolicyGetRequest, PolicyGetResponse, PolicyRejection,
