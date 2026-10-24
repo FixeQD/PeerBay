@@ -1,6 +1,7 @@
 mod app_runtime;
 mod platform_android;
 mod platform_capability;
+mod protocol_capabilities;
 mod protocol_envelope;
 mod protocol_errors;
 mod protocol_json_framing;

@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+pub mod capabilities;
 pub mod envelope;
 pub mod errors;
 pub mod json_framing;
@@ -9,6 +10,7 @@ pub mod limits;
 pub mod message_types;
 pub mod sequence;
 
+pub use capabilities::{CapabilityDocument, CapabilityError, NegotiatedCapabilities};
 pub use envelope::MessageEnvelope;
 pub use errors::{ProtocolError, ProtocolErrorCode, ProtocolErrorScope};
 pub use json_framing::{read_json_frame, write_json_frame};
