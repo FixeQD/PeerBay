@@ -7,6 +7,7 @@ pub mod errors;
 pub mod json_framing;
 pub mod limits;
 pub mod message_types;
+pub mod sequence;
 
 pub use envelope::MessageEnvelope;
 pub use errors::{ProtocolError, ProtocolErrorCode, ProtocolErrorScope};
@@ -19,5 +20,6 @@ pub use message_types::{
     ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
     MessageChannel, MessageType, PairingMessageType,
 };
+pub use sequence::{SequenceError, SequenceTracker};
 
 pub const PROTOCOL_VERSION: u16 = 1;
