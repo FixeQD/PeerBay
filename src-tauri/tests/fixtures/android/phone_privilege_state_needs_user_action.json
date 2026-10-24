@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "id": "android-privilege-state-1",
+  "t": "phone.privilege.state",
+  "sid": "session-phone-fixture",
+  "seq": 3,
+  "ts": 1792700000200,
+  "body": {
+    "request_id": "request-screen-1",
+    "capability": "phone.screen.read",
+    "state": "needs_user_action",
+    "decision": "needs_user_action",
+    "reason_code": "open_media_projection_consent",
+    "provider": "media_projection",
+    "authority": null,
+    "limitations": [],
+    "requires_user_action": true,
+    "next_action": "open_media_projection_consent",
+    "proof": null,
+    "checked_at_ms": 1792700000200,
+    "expires_at_ms": null
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "id": "android-privilege-state-2",
+  "t": "phone.privilege.state",
+  "sid": "session-phone-fixture",
+  "seq": 4,
+  "ts": 1792700000300,
+  "body": {
+    "request_id": "request-input-1",
+    "capability": "phone.input.inject",
+    "state": "ready",
+    "decision": "allowed",
+    "reason_code": "ready",
+    "provider": "accessibility",
+    "authority": "user_granted_service",
+    "limitations": [],
+    "requires_user_action": false,
+    "next_action": null,
+    "proof": {
+      "provider": "accessibility",
+      "authority": "user_granted_service",
+      "package_name": "com.fixeq.peerbay",
+      "uid": 10042,
+      "process_identity": "accessibility.service",
+      "service_version": "1.2.3",
+      "adb_transport": null,
+      "selinux_context": "u:r:accessibility:s0",
+      "started_at_ms": 1792700000000,
+      "checked_at_ms": 1792700000300,
+      "expires_at_ms": 1792703600300,
+      "evidence": [
+        "service_connected",
+        "operation_probe_ok"
+      ]
+    },
+    "checked_at_ms": 1792700000300,
+    "expires_at_ms": 1792703600300
+  }
+}

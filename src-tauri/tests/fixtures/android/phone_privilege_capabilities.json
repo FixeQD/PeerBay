@@ -1,0 +1,56 @@
+{
+  "v": 1,
+  "id": "android-privilege-capabilities-1",
+  "t": "phone.privilege.capabilities",
+  "sid": "session-phone-fixture",
+  "seq": 5,
+  "ts": 1792700000400,
+  "body": {
+    "backends": [
+      {
+        "id": "wireless_adb",
+        "state": "ready",
+        "authority": "adb_shell",
+        "features": [
+          "phone.screen.read",
+          "phone.input.adb"
+        ],
+        "limitations": [],
+        "requires_user_action": false,
+        "next_action": null,
+        "proof": {
+          "provider": "wireless_adb",
+          "authority": "adb_shell",
+          "package_name": "com.fixeq.peerbay",
+          "uid": 2000,
+          "process_identity": null,
+          "service_version": "35.0.2",
+          "adb_transport": "wireless",
+          "selinux_context": "u:r:shell:s0",
+          "started_at_ms": 1792700000000,
+          "checked_at_ms": 1792700000400,
+          "expires_at_ms": 1792703600400,
+          "evidence": [
+            "shell_uid_confirmed"
+          ]
+        },
+        "checked_at_ms": 1792700000400,
+        "expires_at_ms": 1792703600400
+      },
+      {
+        "id": "accessibility",
+        "state": "needs_user_action",
+        "authority": null,
+        "features": [
+          "phone.input.accessibility"
+        ],
+        "limitations": [],
+        "requires_user_action": true,
+        "next_action": "open_accessibility_settings",
+        "proof": null,
+        "checked_at_ms": 1792700000400,
+        "expires_at_ms": null
+      }
+    ]
+  }
+}

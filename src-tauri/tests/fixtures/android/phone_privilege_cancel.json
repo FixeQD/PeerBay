@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "android-privilege-cancel-1",
+  "t": "phone.privilege.cancel",
+  "sid": "session-phone-fixture",
+  "seq": 2,
+  "ts": 1792700000100,
+  "body": {
+    "request_id": "request-screen-1",
+    "reason": "user_requested"
+  }
+}

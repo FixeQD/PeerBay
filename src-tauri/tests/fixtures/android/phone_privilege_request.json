@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "android-privilege-request-1",
+  "t": "phone.privilege.request",
+  "sid": "session-phone-fixture",
+  "seq": 1,
+  "ts": 1792700000000,
+  "body": {
+    "request_id": "request-screen-1",
+    "capability": "phone.screen.read",
+    "provider_hint": "media_projection",
+    "requested_at_ms": 1792700000000
+  }
+}
