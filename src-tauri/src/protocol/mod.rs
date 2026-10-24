@@ -10,6 +10,7 @@ pub mod limits;
 pub mod message_types;
 pub mod pairing;
 pub mod policy;
+pub mod resume;
 pub mod sequence;
 
 pub use capabilities::{CapabilityDocument, CapabilityError, NegotiatedCapabilities};
@@ -32,6 +33,10 @@ pub use pairing::{
 pub use policy::{
     FeaturePolicy, PolicyError, PolicyGetRequest, PolicyGetResponse, PolicyRejection,
     PolicyRejectionReason, PolicySetRequest, PolicySetResponse, UserPolicyState,
+};
+pub use resume::{
+    ChannelMigration, ChannelResumeCursor, ResumeError, ResumeKey, ResumeRejectionReason,
+    SessionChannel, SessionResumeAccepted, SessionResumeRejected, SessionResumeRequest,
 };
 pub use sequence::{SequenceError, SequenceTracker};
 
