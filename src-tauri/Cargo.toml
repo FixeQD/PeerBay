@@ -1,6 +1,7 @@
 [package]
 name = "peerbay"
 version = "0.1.0"
+autotests = true
 description = "Local-first peer-to-peer connectivity and sharing across Android, Linux, and Windows"
 authors = ["FixeQ"]
 edition = "2024"

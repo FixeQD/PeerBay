@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AndroidHostLifecycle {
+pub enum AndroidHostLifecycle {
     Created,
     Resumed,
     Paused,
@@ -12,7 +12,7 @@ pub(crate) enum AndroidHostLifecycle {
 }
 
 impl AndroidHostLifecycle {
-    fn can_transition(self, next: Self) -> bool {
+    pub fn can_transition(self, next: Self) -> bool {
         matches!(
             (self, next),
             (
@@ -25,14 +25,14 @@ impl AndroidHostLifecycle {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct AndroidBridgeSnapshot {
-    pub(crate) lifecycle: AndroidHostLifecycle,
+pub struct AndroidBridgeSnapshot {
+    pub lifecycle: AndroidHostLifecycle,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct InvalidAndroidLifecycleTransition {
-    pub(crate) from: AndroidHostLifecycle,
-    pub(crate) to: AndroidHostLifecycle,
+pub struct InvalidAndroidLifecycleTransition {
+    pub from: AndroidHostLifecycle,
+    pub to: AndroidHostLifecycle,
 }
 
 impl Display for InvalidAndroidLifecycleTransition {
@@ -49,12 +49,12 @@ impl std::error::Error for InvalidAndroidLifecycleTransition {}
 
 /// Rust-owned state boundary for the generated Android host and future JNI or service adapters
 #[derive(Clone)]
-pub(crate) struct AndroidBridgeState {
+pub struct AndroidBridgeState {
     snapshot: Arc<RwLock<AndroidBridgeSnapshot>>,
 }
 
 impl AndroidBridgeState {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             snapshot: Arc::new(RwLock::new(AndroidBridgeSnapshot {
                 lifecycle: AndroidHostLifecycle::Created,
@@ -62,13 +62,13 @@ impl AndroidBridgeState {
         }
     }
 
-    pub(crate) fn snapshot(&self) -> eros::Result<AndroidBridgeSnapshot> {
+    pub fn snapshot(&self) -> eros::Result<AndroidBridgeSnapshot> {
         Ok(*self.snapshot.read().map_err(|_| {
             eros::error!("Android bridge state lock poisoned").context("read Android bridge state")
         })?)
     }
 
-    pub(crate) fn transition(&self, next: AndroidHostLifecycle) -> eros::Result<()> {
+    pub fn transition(&self, next: AndroidHostLifecycle) -> eros::Result<()> {
         let mut snapshot = self.snapshot.write().map_err(|_| {
             eros::error!("Android bridge state lock poisoned").context("write Android bridge state")
         })?;
@@ -89,40 +89,6 @@ impl AndroidBridgeState {
 impl Default for AndroidBridgeState {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{AndroidBridgeState, AndroidHostLifecycle};
-
-    #[test]
-    fn bridge_state_tracks_native_host_lifecycle() {
-        let state = AndroidBridgeState::new();
-        assert_eq!(
-            state
-                .snapshot()
-                .expect("read Android bridge state")
-                .lifecycle,
-            AndroidHostLifecycle::Created
-        );
-
-        state
-            .transition(AndroidHostLifecycle::Resumed)
-            .expect("created host should resume");
-        state
-            .transition(AndroidHostLifecycle::Paused)
-            .expect("resumed host should pause");
-        state
-            .transition(AndroidHostLifecycle::Destroyed)
-            .expect("paused host should be destroyable");
-        assert_eq!(
-            state
-                .snapshot()
-                .expect("read Android bridge state")
-                .lifecycle,
-            AndroidHostLifecycle::Destroyed
-        );
     }
 }
 

@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LifecycleState {
+pub enum LifecycleState {
     Created,
     LoadingIdentity,
     LoadingStore,
@@ -13,7 +13,7 @@ pub(crate) enum LifecycleState {
 }
 
 impl LifecycleState {
-    pub(crate) fn can_transition(self, next: Self) -> bool {
+    pub fn can_transition(self, next: Self) -> bool {
         matches!(
             (self, next),
             (Self::Created, Self::LoadingIdentity | Self::ShuttingDown)
@@ -37,9 +37,9 @@ impl LifecycleState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct InvalidTransition {
-    pub(crate) from: LifecycleState,
-    pub(crate) to: LifecycleState,
+pub struct InvalidTransition {
+    pub from: LifecycleState,
+    pub to: LifecycleState,
 }
 
 impl Display for InvalidTransition {

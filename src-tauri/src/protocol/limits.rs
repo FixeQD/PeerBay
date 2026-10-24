@@ -4,14 +4,14 @@ use std::fmt::{Display, Formatter};
 
 use super::envelope::MessageEnvelope;
 
-pub(crate) const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
-pub(crate) const DEFAULT_MAX_JSON_SIZE: usize = 256 * 1024;
-pub(crate) const DEFAULT_MAX_STRING_LENGTH: usize = 4 * 1024;
-pub(crate) const DEFAULT_MAX_BATCH_ITEMS: usize = 256;
-pub(crate) const DEFAULT_MAX_PAYLOAD_SIZE: usize = 512 * 1024;
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
+pub const DEFAULT_MAX_JSON_SIZE: usize = 256 * 1024;
+pub const DEFAULT_MAX_STRING_LENGTH: usize = 4 * 1024;
+pub const DEFAULT_MAX_BATCH_ITEMS: usize = 256;
+pub const DEFAULT_MAX_PAYLOAD_SIZE: usize = 512 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ProtocolLimits {
+pub struct ProtocolLimits {
     max_frame_size: usize,
     max_json_size: usize,
     max_string_length: usize,
@@ -20,7 +20,7 @@ pub(crate) struct ProtocolLimits {
 }
 
 impl ProtocolLimits {
-    pub(crate) const fn new(
+    pub const fn new(
         max_frame_size: usize,
         max_json_size: usize,
         max_string_length: usize,
@@ -36,27 +36,27 @@ impl ProtocolLimits {
         }
     }
 
-    pub(crate) const fn max_frame_size(self) -> usize {
+    pub const fn max_frame_size(self) -> usize {
         self.max_frame_size
     }
 
-    pub(crate) const fn max_json_size(self) -> usize {
+    pub const fn max_json_size(self) -> usize {
         self.max_json_size
     }
 
-    pub(crate) const fn max_string_length(self) -> usize {
+    pub const fn max_string_length(self) -> usize {
         self.max_string_length
     }
 
-    pub(crate) const fn max_batch_items(self) -> usize {
+    pub const fn max_batch_items(self) -> usize {
         self.max_batch_items
     }
 
-    pub(crate) const fn max_payload_size(self) -> usize {
+    pub const fn max_payload_size(self) -> usize {
         self.max_payload_size
     }
 
-    pub(crate) fn validate_frame_size(self, size: usize) -> eros::Result<()> {
+    pub fn validate_frame_size(self, size: usize) -> eros::Result<()> {
         if size > self.max_frame_size {
             return Err(eros::error!(ProtocolLimitError::FrameTooLarge {
                 size,
@@ -67,7 +67,7 @@ impl ProtocolLimits {
         Ok(())
     }
 
-    pub(crate) fn validate_json_size(self, size: usize) -> eros::Result<()> {
+    pub fn validate_json_size(self, size: usize) -> eros::Result<()> {
         if size > self.max_json_size {
             return Err(eros::error!(ProtocolLimitError::JsonTooLarge {
                 size,
@@ -78,7 +78,7 @@ impl ProtocolLimits {
         Ok(())
     }
 
-    pub(crate) fn validate_string(self, field: &'static str, value: &str) -> eros::Result<()> {
+    pub fn validate_string(self, field: &'static str, value: &str) -> eros::Result<()> {
         if value.trim().is_empty() {
             return Err(eros::error!(ProtocolLimitError::InvalidIdentifier {
                 field
@@ -97,7 +97,7 @@ impl ProtocolLimits {
         Ok(())
     }
 
-    pub(crate) fn validate_batch(self, field: &'static str, count: usize) -> eros::Result<()> {
+    pub fn validate_batch(self, field: &'static str, count: usize) -> eros::Result<()> {
         if count > self.max_batch_items {
             return Err(eros::error!(ProtocolLimitError::BatchTooLarge {
                 field,
@@ -109,7 +109,7 @@ impl ProtocolLimits {
         Ok(())
     }
 
-    pub(crate) fn validate_payload_size(self, size: usize) -> eros::Result<()> {
+    pub fn validate_payload_size(self, size: usize) -> eros::Result<()> {
         if size > self.max_payload_size {
             return Err(eros::error!(ProtocolLimitError::PayloadTooLarge {
                 size,
@@ -120,7 +120,7 @@ impl ProtocolLimits {
         Ok(())
     }
 
-    pub(crate) fn validate_envelope<T>(self, envelope: &MessageEnvelope<T>) -> eros::Result<()> {
+    pub fn validate_envelope<T>(self, envelope: &MessageEnvelope<T>) -> eros::Result<()> {
         self.validate_string("id", &envelope.id)?;
         self.validate_string("t", envelope.message_type.as_str())?;
         self.validate_string("sid", &envelope.session_id)
@@ -140,7 +140,7 @@ impl Default for ProtocolLimits {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum ProtocolLimitError {
+pub enum ProtocolLimitError {
     FrameTooLarge {
         size: usize,
         max: usize,
@@ -203,75 +203,3 @@ impl Display for ProtocolLimitError {
 }
 
 impl std::error::Error for ProtocolLimitError {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::protocol::{ControlMessageType, MessageType};
-
-    #[test]
-    fn default_limits_match_the_protocol_budget() {
-        let limits = ProtocolLimits::default();
-
-        assert_eq!(limits.max_frame_size(), DEFAULT_MAX_FRAME_SIZE);
-        assert_eq!(limits.max_json_size(), DEFAULT_MAX_JSON_SIZE);
-        assert_eq!(limits.max_string_length(), DEFAULT_MAX_STRING_LENGTH);
-        assert_eq!(limits.max_batch_items(), DEFAULT_MAX_BATCH_ITEMS);
-        assert_eq!(limits.max_payload_size(), DEFAULT_MAX_PAYLOAD_SIZE);
-    }
-
-    #[test]
-    fn limits_accept_the_boundary_and_reject_the_next_byte_or_item() {
-        let limits = ProtocolLimits::new(4, 4, 4, 2, 4);
-
-        limits
-            .validate_frame_size(4)
-            .expect("frame boundary is valid");
-        limits
-            .validate_json_size(4)
-            .expect("JSON boundary is valid");
-        limits
-            .validate_string("name", "1234")
-            .expect("string boundary is valid");
-        limits
-            .validate_batch("items", 2)
-            .expect("batch boundary is valid");
-        limits
-            .validate_payload_size(4)
-            .expect("payload boundary is valid");
-
-        assert!(limits.validate_frame_size(5).is_err());
-        assert!(limits.validate_json_size(5).is_err());
-        assert!(limits.validate_string("name", "12345").is_err());
-        assert!(limits.validate_batch("items", 3).is_err());
-        assert!(limits.validate_payload_size(5).is_err());
-    }
-
-    #[test]
-    fn envelope_limit_validation_covers_wire_string_fields() {
-        let limits = ProtocolLimits::new(64, 64, 4, 2, 32);
-        let envelope = MessageEnvelope::new(
-            "12345",
-            MessageType::Control(ControlMessageType::Ping),
-            "sid",
-            1,
-            2,
-            (),
-        );
-
-        let error = envelope
-            .validate_limits(limits)
-            .expect_err("oversized message ID must be rejected")
-            .downcast_inner::<ProtocolLimitError>()
-            .expect("limit error should be preserved");
-
-        assert_eq!(
-            error,
-            ProtocolLimitError::StringTooLong {
-                field: "id",
-                length: 5,
-                max: 4,
-            }
-        );
-    }
-}

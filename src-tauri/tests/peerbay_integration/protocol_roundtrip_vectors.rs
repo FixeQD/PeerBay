@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use peerbay_lib::protocol::{
     ClipboardMessageType, ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION,
     PairingMessageType,
 };

@@ -1,6 +1,7 @@
 [package]
 name = "semantic-input"
 version = "0.1.0"
+autotests = true
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Semantic pointer, keyboard, touch, and gesture types."

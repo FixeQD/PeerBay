@@ -4,7 +4,7 @@ use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum MessageChannel {
+pub enum MessageChannel {
     Control,
     Pairing,
     Clipboard,
@@ -15,7 +15,7 @@ pub(crate) enum MessageChannel {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ControlMessageType {
+pub enum ControlMessageType {
     Hello,
     Welcome,
     Error,
@@ -32,7 +32,7 @@ pub(crate) enum ControlMessageType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PairingMessageType {
+pub enum PairingMessageType {
     Start,
     Commit,
     Nonce,
@@ -45,7 +45,7 @@ pub(crate) enum PairingMessageType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ClipboardMessageType {
+pub enum ClipboardMessageType {
     Offer,
     Request,
     Text,
@@ -54,7 +54,7 @@ pub(crate) enum ClipboardMessageType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FileMessageType {
+pub enum FileMessageType {
     Offer,
     Accept,
     Refuse,
@@ -67,7 +67,7 @@ pub(crate) enum FileMessageType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum InputMessageType {
+pub enum InputMessageType {
     Layout,
     Take,
     Accept,
@@ -83,7 +83,7 @@ pub(crate) enum InputMessageType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum MediaMessageType {
+pub enum MediaMessageType {
     ScreenOffer,
     ScreenAnswer,
     ScreenIce,
@@ -99,7 +99,7 @@ pub(crate) enum MediaMessageType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum MessageType {
+pub enum MessageType {
     Control(ControlMessageType),
     Pairing(PairingMessageType),
     Clipboard(ClipboardMessageType),
@@ -110,7 +110,7 @@ pub(crate) enum MessageType {
 }
 
 impl MessageType {
-    pub(crate) const fn channel(&self) -> MessageChannel {
+    pub const fn channel(&self) -> MessageChannel {
         match self {
             Self::Control(_) => MessageChannel::Control,
             Self::Pairing(_) => MessageChannel::Pairing,
@@ -122,7 +122,7 @@ impl MessageType {
         }
     }
 
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Control(message) => message.as_str(),
             Self::Pairing(message) => message.as_str(),
@@ -134,7 +134,7 @@ impl MessageType {
         }
     }
 
-    pub(crate) fn from_wire(value: String) -> Self {
+    pub fn from_wire(value: String) -> Self {
         match value.as_str() {
             "hello" => Self::Control(ControlMessageType::Hello),
             "welcome" => Self::Control(ControlMessageType::Welcome),
@@ -226,7 +226,7 @@ impl<'de> Deserialize<'de> for MessageType {
 macro_rules! message_type_strings {
     ($type:ty, { $( $variant:ident => $wire:literal ),+ $(,)? }) => {
         impl $type {
-            pub(crate) const fn as_str(self) -> &'static str {
+            pub const fn as_str(self) -> &'static str {
                 match self {
                     $( Self::$variant => $wire, )+
                 }
@@ -312,76 +312,3 @@ message_type_strings!(MediaMessageType, {
     AudioStop => "audio.stop",
     AudioState => "audio.state",
 });
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn known_identifiers_keep_their_channel_and_wire_name() {
-        let identifiers = [
-            (
-                MessageType::Control(ControlMessageType::Hello),
-                MessageChannel::Control,
-                "hello",
-            ),
-            (
-                MessageType::Pairing(PairingMessageType::Confirm),
-                MessageChannel::Pairing,
-                "pair.confirm",
-            ),
-            (
-                MessageType::Clipboard(ClipboardMessageType::Offer),
-                MessageChannel::Clipboard,
-                "clipboard.offer",
-            ),
-            (
-                MessageType::Files(FileMessageType::Chunk),
-                MessageChannel::Files,
-                "file.chunk",
-            ),
-            (
-                MessageType::Input(InputMessageType::KeyDown),
-                MessageChannel::Input,
-                "input.key_down",
-            ),
-            (
-                MessageType::Media(MediaMessageType::ScreenState),
-                MessageChannel::Media,
-                "screen.state",
-            ),
-        ];
-
-        for (identifier, channel, wire_name) in identifiers {
-            assert_eq!(identifier.channel(), channel);
-            assert_eq!(identifier.as_str(), wire_name);
-            assert_eq!(
-                serde_json::to_string(&identifier).expect("identifier should serialize"),
-                format!("\"{wire_name}\"")
-            );
-        }
-    }
-
-    #[test]
-    fn identifiers_parse_known_and_preserve_unknown_wire_names() {
-        let known: MessageType =
-            serde_json::from_str("\"session.resume\"").expect("known identifier should parse");
-        assert_eq!(
-            known,
-            MessageType::Control(ControlMessageType::SessionResume)
-        );
-
-        let unknown: MessageType =
-            serde_json::from_str("\"future.message\"").expect("unknown identifier should parse");
-        assert_eq!(unknown, MessageType::Unknown("future.message".to_owned()));
-        assert_eq!(unknown.channel(), MessageChannel::Unknown);
-        assert_eq!(unknown.as_str(), "future.message");
-    }
-
-    #[test]
-    fn empty_identifier_is_rejected_during_deserialization() {
-        let result = serde_json::from_str::<MessageType>("\"\"");
-
-        assert!(result.is_err());
-    }
-}

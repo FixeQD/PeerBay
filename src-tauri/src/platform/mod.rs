@@ -1,15 +1,15 @@
 //! Platform-port boundary.
 
 #[allow(dead_code)]
-mod capability;
+pub mod capability;
 #[allow(dead_code)]
 mod mock;
 #[allow(dead_code)]
-mod ports;
+pub mod ports;
 
 #[cfg(target_os = "android")]
 #[allow(dead_code)]
-mod android;
+pub mod android;
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod linux;
@@ -17,7 +17,7 @@ mod linux;
 #[allow(dead_code)]
 mod windows;
 
-pub(crate) use capability::PlatformDescriptor;
+pub use capability::{PlatformDescriptor, PlatformTarget};
 
 #[cfg(target_os = "android")]
-pub(crate) use android::AndroidBridgeState;
+pub use android::{AndroidBridgeState, AndroidHostLifecycle};

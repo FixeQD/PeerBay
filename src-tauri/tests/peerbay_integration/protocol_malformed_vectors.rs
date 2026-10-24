@@ -3,16 +3,17 @@ use std::io::Cursor;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{
+use peerbay_lib::protocol::{
     ClipboardMessageType, MessageEnvelope, MessageType, ProtocolLimitError, ProtocolLimits,
-    read_json_frame,
+    read_json_frame, write_json_frame,
 };
 
 const VALID_ENVELOPE: &str = r#"{"v":1,"id":"message-1","t":"clipboard.text","sid":"session-1","seq":1,"ts":1792700000000,"body":{"text":"hello"}}"#;
 
 #[derive(Debug, Deserialize)]
 struct ClipboardTextBody {
-    text: String,
+    #[serde(rename = "text")]
+    _text: String,
 }
 
 fn default_limits() -> ProtocolLimits {
@@ -83,7 +84,7 @@ fn malformed_vectors_reject_oversized_json_data_before_writing() {
     let payload = json!({ "text": "this body exceeds the JSON budget" });
     let mut output = Vec::new();
 
-    let error = super::write_json_frame(&mut output, &payload, limits)
+    let error = write_json_frame(&mut output, &payload, limits)
         .expect_err("oversized JSON should be rejected")
         .to_string();
 

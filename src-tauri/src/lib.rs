@@ -1,15 +1,15 @@
-mod app;
+pub mod app;
 mod commands;
 mod events;
 mod features;
 mod identity;
-mod platform;
-mod protocol;
-mod redaction;
+pub mod platform;
+pub mod protocol;
+pub mod redaction;
 mod session;
 mod storage;
 mod transport;
-mod viewmodel;
+pub mod viewmodel;
 
 use app::AppRuntime;
 use eros::Context;
