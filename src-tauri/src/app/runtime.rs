@@ -2,12 +2,15 @@ use std::sync::Arc;
 
 use eros::Context;
 
+use crate::identity::DeviceIdentity;
+
 use super::{AppState, LifecycleState, WorkerContext, WorkerSupervisor};
 
 #[derive(Clone)]
 pub struct AppRuntime {
     state: Arc<AppState>,
     workers: Arc<WorkerSupervisor>,
+    identity: Arc<DeviceIdentity>,
 }
 
 #[allow(dead_code)]
@@ -16,7 +19,12 @@ impl AppRuntime {
         Self {
             state: Arc::new(AppState::new()),
             workers: Arc::new(WorkerSupervisor::new()),
+            identity: Arc::new(DeviceIdentity::generate()),
         }
+    }
+
+    pub fn identity(&self) -> DeviceIdentity {
+        self.identity.as_ref().clone()
     }
 
     pub fn start(&self) -> eros::Result<()> {

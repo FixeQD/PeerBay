@@ -1,4 +1,5 @@
 mod app_runtime;
+mod identity;
 mod platform_android;
 mod platform_capability;
 mod protocol_android_fixtures;

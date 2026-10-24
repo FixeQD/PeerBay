@@ -10,6 +10,7 @@ resolver = "2"
 [workspace.dependencies]
 eros = "0.8"
 framed-ipc = { path = "crates/framed-ipc" }
+uuid = { version = "1", features = ["v4"] }
 
 [profile.release]
 codegen-units = 1

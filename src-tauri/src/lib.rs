@@ -2,7 +2,7 @@ pub mod app;
 mod commands;
 mod events;
 mod features;
-mod identity;
+pub mod identity;
 pub mod platform;
 pub mod protocol;
 pub mod redaction;
