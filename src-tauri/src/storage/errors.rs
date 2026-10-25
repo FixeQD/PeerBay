@@ -45,6 +45,7 @@ pub enum StorageError {
     AtomicWriteFailed,
     AtomicReadFailed,
     ValidationFailed { reason: &'static str },
+    MigrationFailed { reason: &'static str },
 }
 
 impl Display for StorageError {
@@ -54,12 +55,17 @@ impl Display for StorageError {
                 formatter,
                 "schema version mismatch: expected {expected}, found {found}"
             ),
-            Self::SchemaVersionMissing => write!(formatter, "required schema_version field missing"),
+            Self::SchemaVersionMissing => {
+                write!(formatter, "required schema_version field missing")
+            }
             Self::InvalidJson { reason } => write!(formatter, "invalid JSON: {reason}"),
             Self::AtomicWriteFailed => write!(formatter, "atomic write failed"),
             Self::AtomicReadFailed => write!(formatter, "atomic read failed"),
             Self::ValidationFailed { reason } => {
                 write!(formatter, "store validation failed: {reason}")
+            }
+            Self::MigrationFailed { reason } => {
+                write!(formatter, "migration failed: {reason}")
             }
         }
     }
