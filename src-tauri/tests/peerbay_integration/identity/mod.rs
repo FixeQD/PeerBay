@@ -1,6 +1,7 @@
 mod certificate;
 mod device;
 mod keypair;
+mod persistence;
 mod runtime;
 mod security;
 mod store;
