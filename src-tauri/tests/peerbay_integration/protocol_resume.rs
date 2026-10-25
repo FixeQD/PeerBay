@@ -147,7 +147,6 @@ fn migration_rejects_reusing_the_old_channel_id() {
     }
     .validate()
     .map(|_| ())
-    .map_err(|error| error)
     .expect_err("migration must allocate a new channel ID")
     .downcast_inner::<ResumeError>()
     .expect("resume error should be preserved");

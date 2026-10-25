@@ -8,9 +8,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            lifecycle: RwLock::new(LifecycleState::Created),
-        }
+        Self::default()
     }
 
     pub fn lifecycle(&self) -> eros::Result<LifecycleState> {
@@ -37,5 +35,13 @@ impl AppState {
 
         *current = next;
         Ok(())
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            lifecycle: RwLock::new(LifecycleState::Created),
+        }
     }
 }

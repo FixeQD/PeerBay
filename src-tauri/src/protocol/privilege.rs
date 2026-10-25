@@ -454,14 +454,14 @@ fn validate_expiry(
     checked_at_ms: u64,
     expires_at_ms: Option<u64>,
 ) -> eros::Result<()> {
-    if let Some(expires_at_ms) = expires_at_ms {
-        if expires_at_ms <= checked_at_ms {
-            return Err(eros::error!(PrivilegeError::ExpiryNotAfterCheck {
-                field,
-                checked_at_ms,
-                expires_at_ms,
-            }));
-        }
+    if let Some(expires_at_ms) = expires_at_ms
+        && expires_at_ms <= checked_at_ms
+    {
+        return Err(eros::error!(PrivilegeError::ExpiryNotAfterCheck {
+            field,
+            checked_at_ms,
+            expires_at_ms,
+        }));
     }
 
     Ok(())
