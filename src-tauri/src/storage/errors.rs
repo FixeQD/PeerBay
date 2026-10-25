@@ -37,4 +37,34 @@ impl Display for StorageDirectoryError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum StorageError {
+    SchemaVersionMismatch { expected: u16, found: u16 },
+    SchemaVersionMissing,
+    InvalidJson { reason: &'static str },
+    AtomicWriteFailed,
+    AtomicReadFailed,
+    ValidationFailed { reason: &'static str },
+}
+
+impl Display for StorageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SchemaVersionMismatch { expected, found } => write!(
+                formatter,
+                "schema version mismatch: expected {expected}, found {found}"
+            ),
+            Self::SchemaVersionMissing => write!(formatter, "required schema_version field missing"),
+            Self::InvalidJson { reason } => write!(formatter, "invalid JSON: {reason}"),
+            Self::AtomicWriteFailed => write!(formatter, "atomic write failed"),
+            Self::AtomicReadFailed => write!(formatter, "atomic read failed"),
+            Self::ValidationFailed { reason } => {
+                write!(formatter, "store validation failed: {reason}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StorageError {}
+
 impl std::error::Error for StorageDirectoryError {}
