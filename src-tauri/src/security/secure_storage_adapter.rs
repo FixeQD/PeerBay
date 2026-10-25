@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::storage::StorageError;
-use rand::Rng;
 
 /// Try to store a secret via Linux Secret Service
 /// Falls back to encrypted file if connection unavailable
@@ -10,7 +9,7 @@ pub fn try_store_secret(
     label: &str,
     secret_bytes: &[u8],
     seed: &str,
-    fallback_path: &PathBuf,
+    fallback_path: &Path,
 ) -> eros::Result<()> {
     let result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -41,7 +40,7 @@ pub fn try_store_secret(
 }
 
 /// Load a secret from secure storage or fallback file.
-pub fn try_load_secret(label: &str, seed: &str, fallback_path: &PathBuf) -> eros::Result<Vec<u8>> {
+pub fn try_load_secret(_label: &str, seed: &str, fallback_path: &Path) -> eros::Result<Vec<u8>> {
     let result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -50,7 +49,7 @@ pub fn try_load_secret(label: &str, seed: &str, fallback_path: &PathBuf) -> eros
             use secret_service::{EncryptionType, SecretService};
             match SecretService::connect(EncryptionType::Dh).await {
                 Ok(ss) => {
-                    let collection = ss.get_default_collection().await.ok()?;
+                    let _collection = ss.get_default_collection().await.ok()?;
                     None
                 }
                 Err(_) => None,

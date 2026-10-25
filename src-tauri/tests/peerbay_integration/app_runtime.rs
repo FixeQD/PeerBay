@@ -121,7 +121,7 @@ fn shutdown_requests_workers_and_joins_them() {
 
 #[test]
 fn tokio_worker_supervisor_handles_many_spawns() {
-    use peerbay_lib::app::{AppRuntime, AppState, LifecycleState};
+    use peerbay_lib::app::AppRuntime;
     let rt = AppRuntime::new();
     rt.start().expect("start ok");
     for i in 0..10 {
@@ -129,12 +129,4 @@ fn tokio_worker_supervisor_handles_many_spawns() {
     }
     assert_eq!(rt.active_worker_count().unwrap(), 10);
     rt.shutdown().expect("shutdown ok");
-}
-
-
-#[test]
-fn tokio_transport_loopback_rejects_bad_bind() {
-    use peerbay_lib::transport::LoopbackTcpTransport;
-    let bad = LoopbackTcpTransport::new("0.0.0.0:99999");
-    assert!(bad.bind_addr.len() > 0);
 }

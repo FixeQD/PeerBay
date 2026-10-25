@@ -3,7 +3,7 @@ use std::io::Write;
 
 use path_clean::PathClean;
 use peerbay_lib::storage::{
-    CURRENT_SCHEMA_VERSION, MIGRATION_BACKUP_EXTENSION, MigrationReport, MigrationRunner,
+    CURRENT_SCHEMA_VERSION, MIGRATION_BACKUP_EXTENSION, MigrationRunner,
     StorageError, VersionedJsonStore,
 };
 

@@ -1,12 +1,12 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use aes_gcm::{
-    Aes256Gcm, Nonce,
+    Aes256Gcm,
     aead::{Aead, KeyInit},
 };
 use sha2::{Digest, Sha256};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 pub fn derive_local_key(seed: &str, salt: &[u8]) -> Zeroizing<[u8; 32]> {
     let mut hasher = Sha256::new();
@@ -17,12 +17,12 @@ pub fn derive_local_key(seed: &str, salt: &[u8]) -> Zeroizing<[u8; 32]> {
 
 pub fn encrypt_local(data: &[u8], seed: &str) -> Vec<u8> {
     let key_bytes = derive_local_key(seed, b"peerbay-local-fallback-v1");
-    let key = aes_gcm::Key::<Aes256Gcm>::from_slice(key_bytes.as_slice());
-    let cipher = Aes256Gcm::new(key);
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(key_bytes.as_slice()).expect("valid key length");
+    let cipher = Aes256Gcm::new(&key);
     let nonce_bytes: [u8; 12] = rand::random();
-    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+    let nonce = aes_gcm::Nonce::try_from(&nonce_bytes[..]).expect("valid nonce length");
     let ciphertext = cipher
-        .encrypt(nonce, data)
+        .encrypt(&nonce, data)
         .expect("AES-GCM encryption failure");
     let mut result = Vec::with_capacity(12 + ciphertext.len());
     result.extend_from_slice(&nonce_bytes);
@@ -34,12 +34,12 @@ pub fn decrypt_local(data: &[u8], seed: &str) -> Option<Vec<u8>> {
     if data.len() < 12 {
         return None;
     }
-    let nonce = aes_gcm::Nonce::from_slice(&data[..12]);
+    let nonce = aes_gcm::Nonce::try_from(&data[..12]).ok()?;
     let ciphertext = &data[12..];
     let key_bytes = derive_local_key(seed, b"peerbay-local-fallback-v1");
-    let key = aes_gcm::Key::<Aes256Gcm>::from_slice(key_bytes.as_slice());
-    let cipher = Aes256Gcm::new(key);
-    cipher.decrypt(nonce, ciphertext).ok()
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(key_bytes.as_slice()).expect("valid key length");
+    let cipher = Aes256Gcm::new(&key);
+    cipher.decrypt(&nonce, ciphertext).ok()
 }
 
 pub fn write_encrypted_atomic(path: &Path, plaintext: &[u8], seed: &str) -> std::io::Result<()> {

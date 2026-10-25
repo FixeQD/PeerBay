@@ -5,9 +5,8 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use rand::Rng;
 use sha2::{Digest, Sha256};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 pub const PEERBAY_MAGIC: &[u8] = b"PEERBAYENC";
 pub const CURRENT_CIPHER_VERSION: u8 = 1;
@@ -35,13 +34,13 @@ pub fn compute_mac(data: &[u8], mac_key: &[u8; 32]) -> [u8; 32] {
 /// Custom format: PEERBAYENC + version(1) + nonce_len(1) + payload_len(4 LE) + nonce + ciphertext + mac(32)
 pub fn encrypt_custom(data: &[u8], seed: &str) -> Vec<u8> {
     let (aes_key, mac_key) = derive_cipher_keys(seed);
-    let key = aes_gcm::Key::<Aes256Gcm>::from_slice(aes_key.as_slice());
-    let cipher = Aes256Gcm::new(key);
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(aes_key.as_slice()).expect("valid key length");
+    let cipher = Aes256Gcm::new(&key);
 
     // 12-byte random nonce
     let nonce_bytes: [u8; 12] = rand::random();
-    let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher.encrypt(nonce, data).expect("AES-GCM encrypt");
+    let nonce = Nonce::try_from(&nonce_bytes[..]).expect("valid nonce length");
+    let ciphertext = cipher.encrypt(&nonce, data).expect("AES-GCM encrypt");
 
     let payload_len = ciphertext.len() as u32;
 
@@ -100,12 +99,12 @@ pub fn decrypt_custom(data: &[u8], seed: &str) -> Option<Vec<u8>> {
     }
 
     // Extract nonce and ciphertext
-    let nonce = Nonce::from_slice(&bundle[header_size..header_size + nonce_len]);
+    let nonce = Nonce::try_from(&bundle[header_size..header_size + nonce_len]).expect("valid nonce length");
     let ciphertext = &bundle[header_size + nonce_len..mac_offset];
 
-    let key = aes_gcm::Key::<Aes256Gcm>::from_slice(aes_key.as_slice());
-    let cipher = Aes256Gcm::new(key);
-    cipher.decrypt(nonce, ciphertext).ok()
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(aes_key.as_slice()).expect("valid key length");
+    let cipher = Aes256Gcm::new(&key);
+    cipher.decrypt(&nonce, ciphertext).ok()
 }
 
 pub fn write_custom_atomic(path: &Path, plaintext: &[u8], seed: &str) -> std::io::Result<()> {

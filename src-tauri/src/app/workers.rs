@@ -26,7 +26,7 @@ impl WorkerSupervisor {
         }
     }
 
-    pub async fn spawn<F>(&self, name: &str, worker: F) -> eros::Result<()>
+    pub async fn spawn<F>(&self, _name: &str, worker: F) -> eros::Result<()>
     where
         F: FnOnce(WorkerContext) + Send + 'static,
     {

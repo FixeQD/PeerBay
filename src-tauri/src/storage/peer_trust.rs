@@ -1,11 +1,9 @@
 use std::fs;
-use std::path::Path;
 
 use path_clean::PathClean;
 
 use super::errors::StorageError;
-use super::store::{CURRENT_SCHEMA_VERSION, VersionedJsonStore};
-use uuid::Uuid;
+use super::store::VersionedJsonStore;
 
 /// A trust record for a paired peer device.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -100,7 +98,7 @@ impl PeerRecord {
                 || cleaned
                     .components()
                     .next()
-                    .map_or(false, |c| matches!(c, std::path::Component::ParentDir))
+                    .is_some_and(|c| matches!(c, std::path::Component::ParentDir))
             {
                 return Err(eros::error!(StorageError::ValidationFailed {
                     reason: "address traversal after clean"
@@ -194,11 +192,10 @@ impl PeerTrustStore {
             let name_str = name.to_string_lossy();
             if name_str.ends_with(".json") {
                 let peer_id = name_str.trim_end_matches(".json").to_string();
-                if let Ok(record) = self.load(&peer_id) {
-                    if !record.is_revoked() {
+                if let Ok(record) = self.load(&peer_id)
+                    && !record.is_revoked() {
                         peers.push(peer_id);
                     }
-                }
             }
         }
         Ok(peers)
