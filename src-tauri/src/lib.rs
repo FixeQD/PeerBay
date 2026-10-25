@@ -7,7 +7,7 @@ pub mod platform;
 pub mod protocol;
 pub mod redaction;
 mod session;
-mod storage;
+pub mod storage;
 mod transport;
 pub mod viewmodel;
 
@@ -17,7 +17,8 @@ use events::{EventName, LifecyclePayload};
 #[cfg(target_os = "android")]
 use platform::AndroidBridgeState;
 use platform::PlatformDescriptor;
-use tauri::Emitter;
+use storage::PlatformDataDirs;
+use tauri::{Emitter, Manager};
 use viewmodel::ViewModelGateway;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,6 +44,16 @@ fn run_result() -> eros::Result<()> {
     let run_result = builder
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let storage_dirs = PlatformDataDirs::from_tauri(app.handle())
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            storage_dirs
+                .ensure_layout()
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            if !app.manage(storage_dirs) {
+                return Err(Box::new(std::io::Error::other(
+                    "platform storage directories already managed",
+                )));
+            }
             app.handle()
                 .emit(EventName::AppLifecycle.as_str(), LifecyclePayload::ready())?;
             Ok(())
