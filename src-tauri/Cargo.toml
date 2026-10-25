@@ -61,6 +61,7 @@ aes-gcm = "0.11.1"
 secret-service = { version = "5.2.0", features = ["crypto-rust"] }
 tokio = { version = "1.54.1", features = ["rt", "macros", "sync"] }
 hmac = "0.13.0"
+tokio-tungstenite = "0.30.0"
 
 [dev-dependencies]
 x509-parser = { version = "0.18.1", features = ["verify"] }

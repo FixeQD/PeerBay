@@ -1,8 +1,5 @@
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-use std::thread::{self, JoinHandle};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -10,80 +7,54 @@ pub struct WorkerContext {
     shutdown_requested: Arc<AtomicBool>,
 }
 
-#[allow(dead_code)]
 impl WorkerContext {
     pub fn shutdown_requested(&self) -> bool {
         self.shutdown_requested.load(Ordering::Acquire)
     }
 }
 
-#[allow(dead_code)]
 pub struct WorkerSupervisor {
     shutdown_requested: Arc<AtomicBool>,
-    handles: Mutex<Vec<JoinHandle<()>>>,
+    handles: Arc<tokio::sync::Mutex<Vec<JoinHandle<()>>>>,
 }
 
-#[allow(dead_code)]
 impl WorkerSupervisor {
     pub fn new() -> Self {
         Self {
             shutdown_requested: Arc::new(AtomicBool::new(false)),
-            handles: Mutex::new(Vec::new()),
+            handles: Arc::new(tokio::sync::Mutex::new(Vec::new())),
         }
     }
 
-    pub fn spawn<F>(&self, name: &str, worker: F) -> eros::Result<()>
+    pub async fn spawn<F>(&self, name: &str, worker: F) -> eros::Result<()>
     where
         F: FnOnce(WorkerContext) + Send + 'static,
     {
-        let mut handles = self.handles.lock().map_err(|_| {
-            eros::error!("worker registry lock poisoned").context("register worker")
-        })?;
-
         if self.shutdown_requested.load(Ordering::Acquire) {
             return Err(eros::error!("application runtime is shutting down"));
         }
-
         let context = WorkerContext {
             shutdown_requested: Arc::clone(&self.shutdown_requested),
         };
-        let handle = thread::Builder::new()
-            .name(name.to_owned())
-            .spawn(move || worker(context))
-            .map_err(|error| eros::error!(error).context("spawn worker thread"))?;
-
+        let handle = tokio::spawn(async move { worker(context) });
+        let mut handles = self.handles.lock().await;
         handles.push(handle);
         Ok(())
     }
 
-    pub fn active_count(&self) -> eros::Result<usize> {
-        self.handles
-            .lock()
-            .map(|handles| handles.len())
-            .map_err(|_| eros::error!("worker registry lock poisoned").context("count workers"))
+    pub async fn active_count(&self) -> eros::Result<usize> {
+        let handles = self.handles.lock().await;
+        Ok(handles.len())
     }
 
-    pub fn shutdown(&self) -> eros::Result<()> {
+    pub async fn shutdown(&self) -> eros::Result<()> {
         self.shutdown_requested.store(true, Ordering::Release);
-
-        let handles = {
-            let mut handles = self.handles.lock().map_err(|_| {
-                eros::error!("worker registry lock poisoned").context("stop workers")
-            })?;
-            std::mem::take(&mut *handles)
-        };
-
-        let mut worker_panicked = false;
-        for handle in handles {
-            if handle.join().is_err() {
-                worker_panicked = true;
-            }
+        let mut handles = self.handles.lock().await;
+        let taken = std::mem::take(&mut *handles);
+        drop(handles);
+        for handle in taken {
+            let _ = handle.await;
         }
-
-        if worker_panicked {
-            return Err(eros::error!("application worker panicked").context("join workers"));
-        }
-
         Ok(())
     }
 }

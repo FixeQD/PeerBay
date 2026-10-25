@@ -13,6 +13,7 @@ pub struct AppRuntime {
     identity: Arc<DeviceIdentity>,
     identity_keys: Arc<RwLock<IdentityKeyStore>>,
     transport_certificate: Arc<TransportCertificate>,
+    tokio_runtime: Arc<tokio::runtime::Runtime>,
 }
 
 #[allow(dead_code)]
@@ -33,6 +34,11 @@ impl AppRuntime {
             identity,
             identity_keys: Arc::new(RwLock::new(IdentityKeyStore::generated())),
             transport_certificate,
+            tokio_runtime: Arc::new(tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .expect("tokio runtime build")),
         })
     }
 
@@ -110,9 +116,10 @@ impl AppRuntime {
             LifecycleState::ShuttingDown | LifecycleState::Stopped => {}
         }
 
-        self.workers
-            .shutdown()
-            .context("stop application workers")?;
+        let workers = Arc::clone(&self.workers);
+        self.tokio_runtime.block_on(async move {
+            let _ = workers.shutdown().await;
+        });
         self.state
             .transition(LifecycleState::Stopped)
             .context("mark runtime stopped")
@@ -133,12 +140,18 @@ impl AppRuntime {
         if self.lifecycle()? != LifecycleState::Ready {
             return Err(eros::error!("application runtime is not ready"));
         }
-
-        self.workers.spawn(name, worker)
+        let workers = Arc::clone(&self.workers);
+        let name = name.to_owned();
+        self.tokio_runtime.block_on(async move {
+            workers.spawn(&name, worker).await
+        })
     }
 
     pub fn active_worker_count(&self) -> eros::Result<usize> {
-        self.workers.active_count()
+        let workers = Arc::clone(&self.workers);
+        self.tokio_runtime.block_on(async move {
+            workers.active_count().await
+        })
     }
 }
 

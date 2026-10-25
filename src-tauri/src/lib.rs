@@ -7,9 +7,10 @@ pub mod platform;
 pub mod protocol;
 pub mod redaction;
 pub mod security;
-mod session;
+pub mod session;
 pub mod storage;
-mod transport;
+pub mod transport;
+pub mod discovery;
 pub mod viewmodel;
 
 use app::AppRuntime;
