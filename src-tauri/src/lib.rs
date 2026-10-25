@@ -10,7 +10,6 @@ pub mod security;
 pub mod session;
 pub mod storage;
 pub mod transport;
-pub mod discovery;
 pub mod viewmodel;
 
 use app::AppRuntime;

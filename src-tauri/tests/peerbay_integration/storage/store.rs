@@ -718,3 +718,13 @@ fn custom_cipher_rejects_corrupt_payload_length() {
         "bad payload len rejected"
     );
 }
+
+#[test]
+fn redaction_046_string_and_path_guard() {
+    assert!(peerbay_lib::redaction::RedactionPolicy::privacy_safe().is_privacy_safe());
+    assert!(peerbay_lib::redaction::RedactionPolicy::redact_path("/etc/passwd/secret.key").contains("<redacted_path>"));
+    assert!(peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint("deadbeef123456789012345678901234567890123456789012345678901234").contains("***"));
+    assert!(peerbay_lib::redaction::RedactionPolicy::redact_clipboard_preview("secret clipboard content here").contains("...[redacted"));
+    assert!(peerbay_lib::redaction::RedactionPolicy::redact_input_payload("secret input").contains("...[redacted"));
+    assert!(peerbay_lib::redaction::RedactionPolicy::redact_string("secret", None).contains("***"));
+}
