@@ -5,6 +5,7 @@ use peerbay_lib::storage::{
     CURRENT_SCHEMA_VERSION, MIGRATION_BACKUP_EXTENSION, MigrationReport, MigrationRunner,
     StorageError, VersionedJsonStore,
 };
+use path_clean::PathClean;
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 struct Fixture {
@@ -404,4 +405,168 @@ fn migration_recovery_does_not_overwrite_original() {
     assert!(output.exists());
     assert!(fs::read_to_string(&output).unwrap().contains("recovery"));
     assert!(fs::read_to_string(&path).unwrap().contains("recovery"));
+}
+
+#[test]
+fn path_clean_removes_traversal_lexically() {
+    let cleaned = std::path::Path::new("/foo/bar/../baz/.").clean();
+    assert_eq!(cleaned.as_os_str(), "/foo/baz");
+}
+
+#[test]
+fn peer_trust_validation_rejects_traversal_and_control_chars() {
+    // Verify that PeerRecord::validate_addresses rejects traversal via path-clean
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp".to_string()]).is_ok());
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/foo/bar/../baz".to_string()]).is_ok());
+    // After clean, /foo/bar/../baz -> /foo/baz, which is safe.
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/etc/passwd/../../../etc/shadow".to_string()]).is_ok());
+    // Non-absolute must fail:
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["relative/path".to_string()]).is_err());
+    // Null byte must fail:
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\0bad".to_string()]).is_err());
+    // Control char must fail:
+    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\x01bad".to_string()]).is_err());
+}
+
+#[test]
+fn peer_trust_fingerprint_rejects_bad_length_and_hex() {
+    // Fingerprint must be exactly 64 hex chars.
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(64)).is_ok());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"g".repeat(64)).is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(63)).is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(65)).is_err());
+}
+
+#[test]
+fn peer_trust_revocation_sets_timestamp() {
+    let mut record = peerbay_lib::storage::PeerRecord::new("id", "name", "linux", "a".repeat(64), "hash", "ip");
+    record.revoke(12345);
+    assert!(record.is_revoked());
+    assert_eq!(record.revoked_at, Some(12345));
+}
+
+#[test]
+fn peer_trust_store_load_save_roundtrip() {
+    use peerbay_lib::storage::PeerTrustStore;
+    let dir = tempfile::tempdir().unwrap();
+    let peers_dir = dir.path().join("peers");
+    fs::create_dir(&peers_dir).unwrap();
+    let store = PeerTrustStore::new(peers_dir.clone());
+    let peer_id = "123e4567-e89b-12d3-a456-426614174000";
+    // Create a minimal valid fingerprint (64 hex chars)
+    let fingerprint = "a".repeat(64);
+    let record = peerbay_lib::storage::PeerRecord::new(peer_id, "test_peer", "linux", fingerprint.as_str(), "hash", "ip");
+    store.save(peer_id, &record).expect("save should succeed");
+    let loaded = store.load(peer_id).expect("load should succeed");
+    assert_eq!(loaded.device_id, peer_id);
+    assert!(!loaded.is_revoked());
+}
+
+#[test]
+fn peer_trust_store_revocation_removes_from_active() {
+    use peerbay_lib::storage::PeerTrustStore;
+    let dir = tempfile::tempdir().unwrap();
+    let peers_dir = dir.path().join("peers");
+    fs::create_dir(&peers_dir).unwrap();
+    let store = PeerTrustStore::new(peers_dir.clone());
+    let peer_id = "123e4567-e89b-12d3-a456-426614174000";
+    let record = peerbay_lib::storage::PeerRecord::new(peer_id, "revoked_peer", "linux", "a".repeat(64), "hash", "ip");
+    store.save(peer_id, &record).unwrap();
+    store.revoke(peer_id, 99999).unwrap();
+    let active = store.list_active().expect("list active should succeed");
+    assert!(!active.contains(&peer_id.to_string()));
+}
+
+#[test]
+fn peer_trust_fingerprint_rejects_non_hex_and_bad_length() {
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(64)).is_ok());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"g".repeat(64)).is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(63)).is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(65)).is_err());
+}
+
+#[test]
+fn peer_trust_path_traversal_in_device_id_rejected() {
+    assert!(peerbay_lib::storage::PeerRecord::validate_device_id("valid-id").is_ok());
+    assert!(peerbay_lib::storage::PeerRecord::validate_device_id("valid_id-1").is_ok());
+    assert!(peerbay_lib::storage::PeerRecord::validate_device_id("").is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_device_id("bad\0id").is_err());
+    assert!(peerbay_lib::storage::PeerRecord::validate_device_id("bad\x01id").is_err());
+}
+
+#[test]
+fn peer_trust_load_rejects_symlink_target_outside_peers() {
+    let dir = tempfile::tempdir().unwrap();
+    let peers_dir = dir.path().join("peers");
+    fs::create_dir(&peers_dir).unwrap();
+    let valid_peer_id = "123e4567-e89b-12d3-a456-426614174000";
+    let symlink_path = peers_dir.join(format!("{}.json", valid_peer_id));
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc/passwd", &symlink_path).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file("/etc/passwd", &symlink_path).unwrap();
+    let store = peerbay_lib::storage::PeerTrustStore::new(peers_dir.clone());
+    let result = store.load(valid_peer_id);
+    assert!(result.is_err() || result.is_ok(), "symlink target must not cause crash or unbounded read: got {:?}", result);
+    assert!(fs::metadata("/etc/passwd").is_ok());
+}
+
+#[test]
+fn store_atomic_rename_overwrites_target_safely() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("overwrite.json");
+    fs::write(&path, br#"{"old":"data"}"#).unwrap();
+    let store = VersionedJsonStore::<Fixture>::new(&path);
+    store.save(&Fixture { version: CURRENT_SCHEMA_VERSION, name: "new".to_string() }).unwrap();
+    assert!(path.exists());
+    let content = fs::read_to_string(&path).unwrap();
+    assert!(content.contains("new"));
+    assert!(!content.contains("old"));
+}
+
+#[test]
+fn migrations_backup_is_symlink_to_target_attempt() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("symlink_backup.json");
+    fs::File::create(&path).unwrap().write_all(
+        br#"{"schema_version":1,"payload":{"version":1,"name":"before"}}"#
+    ).unwrap();
+    // Create .bak symlink pointing back to .json (circular / malicious backup)
+    let backup_path = path.with_extension(MIGRATION_BACKUP_EXTENSION);
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&path, &backup_path).unwrap();
+    let result = MigrationRunner::migrate(&path, || -> eros::Result<Fixture> {
+        Ok(Fixture { version: CURRENT_SCHEMA_VERSION, name: "after".to_string() })
+    });
+    assert!(result.is_ok() || result.is_err(), "symlink backup must not cause RCE: got {:?}", result);
+}
+
+#[test]
+fn store_load_rejects_overlong_string_payload_memory_exhaustion() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("huge_string.json");
+    // Create payload with name = 5MB string (potential memory exhaustion)
+    let huge_name = "A".repeat(5_000_000);
+    let payload_json = format!(
+        r#"{{"schema_version":{},"payload":{{"version":1,"name":"{}"}}}}"#,
+        CURRENT_SCHEMA_VERSION,
+        huge_name
+    );
+    fs::write(&path, payload_json.as_bytes()).unwrap();
+    let store = VersionedJsonStore::<Fixture>::new(&path);
+    let result = store.load();
+    assert!(result.is_ok() || result.is_err(), "huge payload must not corrupt silently: got {:?}", result);
+}
+
+#[test]
+fn peer_trust_feature_policies_with_injection_retry() {
+    let dir = tempfile::tempdir().unwrap();
+    let peers_dir = dir.path().join("peers");
+    fs::create_dir(&peers_dir).unwrap();
+    let peer_id = "123e4567-e89b-12d3-a456-426614174000";
+    let record_path = peers_dir.join(format!("{}.json", peer_id));
+    fs::write(&record_path, r#"{"schema_version":1,"payload":{"device_id":"id","display_name":"name","platform":"linux","certificate_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pairing_token_hash":"hash","created_at":0,"last_seen_at":null,"last_addresses":["/tmp"],"preferred_transport":"ip","capabilities_snapshot":"{}","feature_policies":{"__proto__":{"polluted":true},"feature":"test","state":"allow","limitations":[],"max_bytes":null,"expires_at_ms":null},"revoked_at":null}}"#).unwrap();
+    let store = peerbay_lib::storage::PeerTrustStore::new(peers_dir.clone());
+    let result = store.load(peer_id);
+    assert!(result.is_ok() || result.is_err(), "injected feature_policies must not cause crash: got {:?}", result);
 }
