@@ -6,6 +6,7 @@ pub mod identity;
 pub mod platform;
 pub mod protocol;
 pub mod redaction;
+pub mod security;
 mod session;
 pub mod storage;
 mod transport;

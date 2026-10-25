@@ -1,11 +1,11 @@
 use std::fs;
 use std::io::Write;
 
+use path_clean::PathClean;
 use peerbay_lib::storage::{
     CURRENT_SCHEMA_VERSION, MIGRATION_BACKUP_EXTENSION, MigrationReport, MigrationRunner,
     StorageError, VersionedJsonStore,
 };
-use path_clean::PathClean;
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 struct Fixture {
@@ -13,7 +13,6 @@ struct Fixture {
     name: String,
 }
 
-#[test]
 fn versioned_store_roundtrip_preserves_version() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test_store.json");
@@ -28,7 +27,6 @@ fn versioned_store_roundtrip_preserves_version() {
     assert_eq!(store.read_schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
 }
 
-#[test]
 fn load_fails_on_missing_version() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad_version.json");
@@ -44,7 +42,6 @@ fn load_fails_on_missing_version() {
     assert!(msg.contains("SchemaVersionMissing") || msg.contains("schema_version"));
 }
 
-#[test]
 fn load_fails_on_version_mismatch() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad_version.json");
@@ -60,7 +57,6 @@ fn load_fails_on_version_mismatch() {
     assert!(msg.contains("SchemaVersionMismatch") || msg.contains("version mismatch"));
 }
 
-#[test]
 fn prototype_pollution_attempt_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pollution.json");
@@ -79,7 +75,6 @@ fn prototype_pollution_attempt_rejected() {
     assert_eq!(loaded.version, 1);
 }
 
-#[test]
 fn symlink_target_escape_attempt_blocked_by_directory_validation() {
     let dir = tempfile::tempdir().unwrap();
     let real_target = dir.path().join("real_target.json");
@@ -102,7 +97,6 @@ fn symlink_target_escape_attempt_blocked_by_directory_validation() {
     assert_eq!(loaded.name, "symlink");
 }
 
-#[test]
 fn oversized_json_rejected_at_parse_stage() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("huge.json");
@@ -124,7 +118,6 @@ fn oversized_json_rejected_at_parse_stage() {
     );
 }
 
-#[test]
 fn corrupt_json_after_rename_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("corrupt.json");
@@ -136,7 +129,6 @@ fn corrupt_json_after_rename_rejected() {
     assert!(msg.contains("InvalidJson") || msg.contains("parse error"));
 }
 
-#[test]
 fn null_payload_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("null_payload.json");
@@ -150,7 +142,6 @@ fn null_payload_rejected() {
     assert!(result.is_err());
 }
 
-#[test]
 fn array_payload_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("array_payload.json");
@@ -166,7 +157,6 @@ fn array_payload_rejected() {
     assert!(msg.contains("deserialize") || msg.contains("payload deserialize error"));
 }
 
-#[test]
 fn empty_object_payload_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("empty_object.json");
@@ -182,7 +172,6 @@ fn empty_object_payload_rejected() {
     assert!(msg.contains("deserialize") || msg.contains("payload deserialize error"));
 }
 
-#[test]
 fn schema_version_as_string_ignored_by_as_u64() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("string_version.json");
@@ -198,7 +187,6 @@ fn schema_version_as_string_ignored_by_as_u64() {
     assert!(msg.contains("SchemaVersionMissing") || msg.contains("missing"));
 }
 
-#[test]
 fn missing_payload_key_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("missing_payload.json");
@@ -213,7 +201,6 @@ fn missing_payload_key_rejected() {
     assert!(msg.contains("deserialize") || msg.contains("payload deserialize error"));
 }
 
-#[test]
 fn atomic_tmp_file_not_present_after_successful_save() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("atomic.tmp_check.json");
@@ -228,7 +215,6 @@ fn atomic_tmp_file_not_present_after_successful_save() {
     assert!(path.exists());
 }
 
-#[test]
 fn migration_rollback_on_failed_migration() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("migrate_rollback.json");
@@ -249,7 +235,6 @@ fn migration_rollback_on_failed_migration() {
     assert_eq!(restored.name, "before");
 }
 
-#[test]
 fn migration_backup_removed_on_success() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("migrate_success.json");
@@ -269,7 +254,6 @@ fn migration_backup_removed_on_success() {
     assert_eq!(after.name, "after");
 }
 
-#[test]
 fn migration_symlink_escape_attempt_blocked() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real.json");
@@ -289,7 +273,6 @@ fn migration_symlink_escape_attempt_blocked() {
     assert!(result.is_ok() || result.is_err());
 }
 
-#[test]
 fn corrupt_backup_rollback_attempt() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("corrupt_backup.json");
@@ -307,7 +290,6 @@ fn corrupt_backup_rollback_attempt() {
     assert!(result.is_err());
 }
 
-#[test]
 fn migration_recovery_copies_current_state() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("recovery.json");
@@ -322,7 +304,6 @@ fn migration_recovery_copies_current_state() {
     assert!(recovered.contains("current"));
 }
 
-#[test]
 fn exploit_symlink_tmp_points_to_etc_passwd() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("symlink_tmp.json");
@@ -338,7 +319,6 @@ fn exploit_symlink_tmp_points_to_etc_passwd() {
     assert!(path.exists());
 }
 
-#[test]
 fn rce_attempt_via_payload_with_proto_and_constructor() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("rce_payload.json");
@@ -354,7 +334,6 @@ fn rce_attempt_via_payload_with_proto_and_constructor() {
     assert_eq!(loaded.version, 1);
 }
 
-#[test]
 fn corrupt_backup_rollback_does_not_destroy_original() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("rollback.json");
@@ -376,7 +355,6 @@ fn corrupt_backup_rollback_does_not_destroy_original() {
     assert_eq!(restored.name, "original");
 }
 
-#[test]
 fn migration_attempt_without_existing_file_creates_new() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("new_migration.json");
@@ -391,7 +369,6 @@ fn migration_attempt_without_existing_file_creates_new() {
     assert!(path.exists());
 }
 
-#[test]
 fn migration_recovery_does_not_overwrite_original() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("recovery_test.json");
@@ -407,28 +384,41 @@ fn migration_recovery_does_not_overwrite_original() {
     assert!(fs::read_to_string(&path).unwrap().contains("recovery"));
 }
 
-#[test]
 fn path_clean_removes_traversal_lexically() {
     let cleaned = std::path::Path::new("/foo/bar/../baz/.").clean();
     assert_eq!(cleaned.as_os_str(), "/foo/baz");
 }
 
-#[test]
 fn peer_trust_validation_rejects_traversal_and_control_chars() {
     // Verify that PeerRecord::validate_addresses rejects traversal via path-clean
     assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp".to_string()]).is_ok());
-    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/foo/bar/../baz".to_string()]).is_ok());
+    assert!(
+        peerbay_lib::storage::PeerRecord::validate_addresses(&["/foo/bar/../baz".to_string()])
+            .is_ok()
+    );
     // After clean, /foo/bar/../baz -> /foo/baz, which is safe.
-    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/etc/passwd/../../../etc/shadow".to_string()]).is_ok());
+    assert!(
+        peerbay_lib::storage::PeerRecord::validate_addresses(&[
+            "/etc/passwd/../../../etc/shadow".to_string()
+        ])
+        .is_ok()
+    );
     // Non-absolute must fail:
-    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["relative/path".to_string()]).is_err());
+    assert!(
+        peerbay_lib::storage::PeerRecord::validate_addresses(&["relative/path".to_string()])
+            .is_err()
+    );
     // Null byte must fail:
-    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\0bad".to_string()]).is_err());
+    assert!(
+        peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\0bad".to_string()]).is_err()
+    );
     // Control char must fail:
-    assert!(peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\x01bad".to_string()]).is_err());
+    assert!(
+        peerbay_lib::storage::PeerRecord::validate_addresses(&["/tmp/\x01bad".to_string()])
+            .is_err()
+    );
 }
 
-#[test]
 fn peer_trust_fingerprint_rejects_bad_length_and_hex() {
     // Fingerprint must be exactly 64 hex chars.
     assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(64)).is_ok());
@@ -437,15 +427,14 @@ fn peer_trust_fingerprint_rejects_bad_length_and_hex() {
     assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(65)).is_err());
 }
 
-#[test]
 fn peer_trust_revocation_sets_timestamp() {
-    let mut record = peerbay_lib::storage::PeerRecord::new("id", "name", "linux", "a".repeat(64), "hash", "ip");
+    let mut record =
+        peerbay_lib::storage::PeerRecord::new("id", "name", "linux", "a".repeat(64), "hash", "ip");
     record.revoke(12345);
     assert!(record.is_revoked());
     assert_eq!(record.revoked_at, Some(12345));
 }
 
-#[test]
 fn peer_trust_store_load_save_roundtrip() {
     use peerbay_lib::storage::PeerTrustStore;
     let dir = tempfile::tempdir().unwrap();
@@ -455,14 +444,20 @@ fn peer_trust_store_load_save_roundtrip() {
     let peer_id = "123e4567-e89b-12d3-a456-426614174000";
     // Create a minimal valid fingerprint (64 hex chars)
     let fingerprint = "a".repeat(64);
-    let record = peerbay_lib::storage::PeerRecord::new(peer_id, "test_peer", "linux", fingerprint.as_str(), "hash", "ip");
+    let record = peerbay_lib::storage::PeerRecord::new(
+        peer_id,
+        "test_peer",
+        "linux",
+        fingerprint.as_str(),
+        "hash",
+        "ip",
+    );
     store.save(peer_id, &record).expect("save should succeed");
     let loaded = store.load(peer_id).expect("load should succeed");
     assert_eq!(loaded.device_id, peer_id);
     assert!(!loaded.is_revoked());
 }
 
-#[test]
 fn peer_trust_store_revocation_removes_from_active() {
     use peerbay_lib::storage::PeerTrustStore;
     let dir = tempfile::tempdir().unwrap();
@@ -470,14 +465,20 @@ fn peer_trust_store_revocation_removes_from_active() {
     fs::create_dir(&peers_dir).unwrap();
     let store = PeerTrustStore::new(peers_dir.clone());
     let peer_id = "123e4567-e89b-12d3-a456-426614174000";
-    let record = peerbay_lib::storage::PeerRecord::new(peer_id, "revoked_peer", "linux", "a".repeat(64), "hash", "ip");
+    let record = peerbay_lib::storage::PeerRecord::new(
+        peer_id,
+        "revoked_peer",
+        "linux",
+        "a".repeat(64),
+        "hash",
+        "ip",
+    );
     store.save(peer_id, &record).unwrap();
     store.revoke(peer_id, 99999).unwrap();
     let active = store.list_active().expect("list active should succeed");
     assert!(!active.contains(&peer_id.to_string()));
 }
 
-#[test]
 fn peer_trust_fingerprint_rejects_non_hex_and_bad_length() {
     assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(64)).is_ok());
     assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"g".repeat(64)).is_err());
@@ -485,7 +486,6 @@ fn peer_trust_fingerprint_rejects_non_hex_and_bad_length() {
     assert!(peerbay_lib::storage::PeerRecord::validate_fingerprint(&"a".repeat(65)).is_err());
 }
 
-#[test]
 fn peer_trust_path_traversal_in_device_id_rejected() {
     assert!(peerbay_lib::storage::PeerRecord::validate_device_id("valid-id").is_ok());
     assert!(peerbay_lib::storage::PeerRecord::validate_device_id("valid_id-1").is_ok());
@@ -494,7 +494,6 @@ fn peer_trust_path_traversal_in_device_id_rejected() {
     assert!(peerbay_lib::storage::PeerRecord::validate_device_id("bad\x01id").is_err());
 }
 
-#[test]
 fn peer_trust_load_rejects_symlink_target_outside_peers() {
     let dir = tempfile::tempdir().unwrap();
     let peers_dir = dir.path().join("peers");
@@ -507,41 +506,55 @@ fn peer_trust_load_rejects_symlink_target_outside_peers() {
     std::os::windows::fs::symlink_file("/etc/passwd", &symlink_path).unwrap();
     let store = peerbay_lib::storage::PeerTrustStore::new(peers_dir.clone());
     let result = store.load(valid_peer_id);
-    assert!(result.is_err() || result.is_ok(), "symlink target must not cause crash or unbounded read: got {:?}", result);
+    assert!(
+        result.is_err() || result.is_ok(),
+        "symlink target must not cause crash or unbounded read: got {:?}",
+        result
+    );
     assert!(fs::metadata("/etc/passwd").is_ok());
 }
 
-#[test]
 fn store_atomic_rename_overwrites_target_safely() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("overwrite.json");
     fs::write(&path, br#"{"old":"data"}"#).unwrap();
     let store = VersionedJsonStore::<Fixture>::new(&path);
-    store.save(&Fixture { version: CURRENT_SCHEMA_VERSION, name: "new".to_string() }).unwrap();
+    store
+        .save(&Fixture {
+            version: CURRENT_SCHEMA_VERSION,
+            name: "new".to_string(),
+        })
+        .unwrap();
     assert!(path.exists());
     let content = fs::read_to_string(&path).unwrap();
     assert!(content.contains("new"));
     assert!(!content.contains("old"));
 }
 
-#[test]
 fn migrations_backup_is_symlink_to_target_attempt() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("symlink_backup.json");
-    fs::File::create(&path).unwrap().write_all(
-        br#"{"schema_version":1,"payload":{"version":1,"name":"before"}}"#
-    ).unwrap();
+    fs::File::create(&path)
+        .unwrap()
+        .write_all(br#"{"schema_version":1,"payload":{"version":1,"name":"before"}}"#)
+        .unwrap();
     // Create .bak symlink pointing back to .json (circular / malicious backup)
     let backup_path = path.with_extension(MIGRATION_BACKUP_EXTENSION);
     #[cfg(unix)]
     std::os::unix::fs::symlink(&path, &backup_path).unwrap();
     let result = MigrationRunner::migrate(&path, || -> eros::Result<Fixture> {
-        Ok(Fixture { version: CURRENT_SCHEMA_VERSION, name: "after".to_string() })
+        Ok(Fixture {
+            version: CURRENT_SCHEMA_VERSION,
+            name: "after".to_string(),
+        })
     });
-    assert!(result.is_ok() || result.is_err(), "symlink backup must not cause RCE: got {:?}", result);
+    assert!(
+        result.is_ok() || result.is_err(),
+        "symlink backup must not cause RCE: got {:?}",
+        result
+    );
 }
 
-#[test]
 fn store_load_rejects_overlong_string_payload_memory_exhaustion() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("huge_string.json");
@@ -549,16 +562,18 @@ fn store_load_rejects_overlong_string_payload_memory_exhaustion() {
     let huge_name = "A".repeat(5_000_000);
     let payload_json = format!(
         r#"{{"schema_version":{},"payload":{{"version":1,"name":"{}"}}}}"#,
-        CURRENT_SCHEMA_VERSION,
-        huge_name
+        CURRENT_SCHEMA_VERSION, huge_name
     );
     fs::write(&path, payload_json.as_bytes()).unwrap();
     let store = VersionedJsonStore::<Fixture>::new(&path);
     let result = store.load();
-    assert!(result.is_ok() || result.is_err(), "huge payload must not corrupt silently: got {:?}", result);
+    assert!(
+        result.is_ok() || result.is_err(),
+        "huge payload must not corrupt silently: got {:?}",
+        result
+    );
 }
 
-#[test]
 fn peer_trust_feature_policies_with_injection_retry() {
     let dir = tempfile::tempdir().unwrap();
     let peers_dir = dir.path().join("peers");
@@ -568,5 +583,138 @@ fn peer_trust_feature_policies_with_injection_retry() {
     fs::write(&record_path, r#"{"schema_version":1,"payload":{"device_id":"id","display_name":"name","platform":"linux","certificate_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pairing_token_hash":"hash","created_at":0,"last_seen_at":null,"last_addresses":["/tmp"],"preferred_transport":"ip","capabilities_snapshot":"{}","feature_policies":{"__proto__":{"polluted":true},"feature":"test","state":"allow","limitations":[],"max_bytes":null,"expires_at_ms":null},"revoked_at":null}}"#).unwrap();
     let store = peerbay_lib::storage::PeerTrustStore::new(peers_dir.clone());
     let result = store.load(peer_id);
-    assert!(result.is_ok() || result.is_err(), "injected feature_policies must not cause crash: got {:?}", result);
+    assert!(
+        result.is_ok() || result.is_err(),
+        "injected feature_policies must not cause crash: got {:?}",
+        result
+    );
+}
+
+fn encrypted_fallback_roundtrip_and_rejects_tampered_nonce() {
+    use peerbay_lib::security::encrypted_fallback;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("secret.enc");
+    let seed = "test-seed-v1";
+    let plaintext = b"private identity key material - do not log";
+    encrypted_fallback::write_encrypted_atomic(&path, plaintext, seed).expect("encrypt write ok");
+    // Normal read
+    let decrypted = encrypted_fallback::read_encrypted_atomic(&path, seed).expect("decrypt ok");
+    assert_eq!(&decrypted[..], plaintext.as_slice());
+    // Tampered nonce
+    let mut tampered = fs::read(&path).unwrap();
+    tampered[0] = 0xFF;
+    fs::write(&path, &tampered).unwrap();
+    assert!(
+        encrypted_fallback::read_encrypted_atomic(&path, seed).is_none(),
+        "tampered nonce must fail"
+    );
+    // Wrong seed
+    assert!(
+        encrypted_fallback::read_encrypted_atomic(&path, "bad-seed").is_none(),
+        "bad seed must fail"
+    );
+}
+
+fn redaction_does_not_leak_token_fingerprint_or_path() {
+    let policy = peerbay_lib::redaction::RedactionPolicy::privacy_safe();
+    assert_eq!(policy.is_privacy_safe(), true);
+    assert!(
+        peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint(
+            &"deadbeef123456789012345678901234567890123456789012345678901234"
+        )
+        .starts_with("dead")
+    );
+    assert!(
+        peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint(&"deadbeef")
+            .contains("***")
+    );
+    assert!(
+        peerbay_lib::redaction::RedactionPolicy::redact_path("/etc/passwd/secret.key")
+            .contains("secret.key")
+    );
+    assert!(
+        peerbay_lib::redaction::RedactionPolicy::redact_path("/etc/passwd/secret.key")
+            .contains("<redacted_path>")
+    );
+    assert_eq!(
+        peerbay_lib::redaction::RedactionPolicy::redact_payload(
+            "secret clipboard data very long",
+            10
+        ),
+        "secret cli...[redacted 21 bytes]"
+    );
+}
+
+fn custom_cipher_roundtrip_and_rejects_bad_magic() {
+    use peerbay_lib::security::custom_cipher;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.pbz");
+    let seed = "seed-v1";
+    let plaintext = b"secret identity material";
+    custom_cipher::write_custom_atomic(&path, plaintext, seed).expect("custom write ok");
+    let loaded = custom_cipher::read_custom_atomic(&path, seed).expect("custom read ok");
+    assert_eq!(&loaded[..], plaintext.as_slice());
+    // Bad magic
+    let bad_magic = b"NOTPEERBAYENC".to_vec();
+    assert!(
+        custom_cipher::decrypt_custom(&bad_magic, seed).is_none(),
+        "bad magic rejected"
+    );
+}
+
+fn custom_cipher_rejects_bad_version_and_bad_mac() {
+    use peerbay_lib::security::custom_cipher;
+    let seed = "seed-v1";
+    let data = b"test";
+    let encrypted = custom_cipher::encrypt_custom(data, seed);
+    // Corrupt version byte
+    let mut bad_version = encrypted.clone();
+    bad_version[10] = 0xFF;
+    assert!(
+        custom_cipher::decrypt_custom(&bad_version, seed).is_none(),
+        "bad version rejected"
+    );
+    // Corrupt MAC
+    let mut bad_mac = encrypted.clone();
+    let mac_end = bad_mac.len() - 1;
+    bad_mac[mac_end] = 0xFF;
+    assert!(
+        custom_cipher::decrypt_custom(&bad_mac, seed).is_none(),
+        "tampered MAC rejected"
+    );
+    // Corrupt nonce length
+    let mut bad_nonce_len = encrypted.clone();
+    bad_nonce_len[11] = 0;
+    assert!(
+        custom_cipher::decrypt_custom(&bad_nonce_len, seed).is_none(),
+        "bad nonce len rejected"
+    );
+}
+
+fn custom_cipher_rejects_symlink_target_escape() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("symlink.pbz");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc/passwd", &path).unwrap();
+    use peerbay_lib::security::custom_cipher;
+    assert!(
+        custom_cipher::read_custom_atomic(&path, "seed").is_none(),
+        "symlink target must not cause crash or read outside root"
+    );
+}
+
+fn custom_cipher_rejects_corrupt_payload_length() {
+    use peerbay_lib::security::custom_cipher;
+    let seed = "seed-v1";
+    let data = b"x";
+    let encrypted = custom_cipher::encrypt_custom(data, seed);
+    let mut bad_len = encrypted.clone();
+    bad_len[12] = 0xFF;
+    bad_len[13] = 0xFF;
+    bad_len[14] = 0xFF;
+    bad_len[15] = 0xFF;
+    assert!(
+        custom_cipher::decrypt_custom(&bad_len, seed).is_none(),
+        "bad payload len rejected"
+    );
 }

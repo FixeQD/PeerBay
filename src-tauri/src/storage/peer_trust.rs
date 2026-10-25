@@ -4,7 +4,7 @@ use std::path::Path;
 use path_clean::PathClean;
 
 use super::errors::StorageError;
-use super::store::{VersionedJsonStore, CURRENT_SCHEMA_VERSION};
+use super::store::{CURRENT_SCHEMA_VERSION, VersionedJsonStore};
 use uuid::Uuid;
 
 /// A trust record for a paired peer device.
@@ -51,20 +51,28 @@ impl PeerRecord {
 
     pub fn validate_fingerprint(fingerprint: &str) -> eros::Result<()> {
         if fingerprint.len() != 64 {
-            return Err(eros::error!(StorageError::ValidationFailed { reason: "fingerprint length must be 64" }));
+            return Err(eros::error!(StorageError::ValidationFailed {
+                reason: "fingerprint length must be 64"
+            }));
         }
         if !fingerprint.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(eros::error!(StorageError::ValidationFailed { reason: "fingerprint must be hex" }));
+            return Err(eros::error!(StorageError::ValidationFailed {
+                reason: "fingerprint must be hex"
+            }));
         }
         Ok(())
     }
 
     pub fn validate_device_id(id: &str) -> eros::Result<()> {
         if id.trim().is_empty() {
-            return Err(eros::error!(StorageError::ValidationFailed { reason: "device_id empty" }));
+            return Err(eros::error!(StorageError::ValidationFailed {
+                reason: "device_id empty"
+            }));
         }
         if id.chars().any(|c| c.is_control()) {
-            return Err(eros::error!(StorageError::ValidationFailed { reason: "device_id contains control char" }));
+            return Err(eros::error!(StorageError::ValidationFailed {
+                reason: "device_id contains control char"
+            }));
         }
         Ok(())
     }
@@ -72,23 +80,42 @@ impl PeerRecord {
     pub fn validate_addresses(addresses: &[String]) -> eros::Result<()> {
         for addr in addresses {
             if addr.contains('\0') {
-                return Err(eros::error!(StorageError::ValidationFailed { reason: "address null byte" }));
+                return Err(eros::error!(StorageError::ValidationFailed {
+                    reason: "address null byte"
+                }));
             }
             if addr.chars().any(|c| c.is_control()) {
-                return Err(eros::error!(StorageError::ValidationFailed { reason: "address control character" }));
+                return Err(eros::error!(StorageError::ValidationFailed {
+                    reason: "address control character"
+                }));
             }
             let path = std::path::Path::new(addr);
             if !path.is_absolute() {
-                return Err(eros::error!(StorageError::ValidationFailed { reason: "address not absolute" }));
+                return Err(eros::error!(StorageError::ValidationFailed {
+                    reason: "address not absolute"
+                }));
             }
             let cleaned = path.clean();
-            if cleaned.as_os_str().is_empty() || cleaned.components().next().map_or(false, |c| matches!(c, std::path::Component::ParentDir)) {
-                return Err(eros::error!(StorageError::ValidationFailed { reason: "address traversal after clean" }));
+            if cleaned.as_os_str().is_empty()
+                || cleaned
+                    .components()
+                    .next()
+                    .map_or(false, |c| matches!(c, std::path::Component::ParentDir))
+            {
+                return Err(eros::error!(StorageError::ValidationFailed {
+                    reason: "address traversal after clean"
+                }));
             }
             if cleaned.as_os_str() != path.as_os_str() {
                 let cleaned_str = cleaned.to_string_lossy();
-                if cleaned_str.contains("/../") || cleaned_str.ends_with("/..") || cleaned_str.contains("/./") || cleaned_str.ends_with("/.") {
-                    return Err(eros::error!(StorageError::ValidationFailed { reason: "address traversal after clean" }));
+                if cleaned_str.contains("/../")
+                    || cleaned_str.ends_with("/..")
+                    || cleaned_str.contains("/./")
+                    || cleaned_str.ends_with("/.")
+                {
+                    return Err(eros::error!(StorageError::ValidationFailed {
+                        reason: "address traversal after clean"
+                    }));
                 }
             }
         }
@@ -139,8 +166,9 @@ impl PeerTrustStore {
     pub fn remove(&self, peer_id: &str) -> eros::Result<bool> {
         let record_path = self.resolve_path(peer_id)?;
         if record_path.exists() {
-            fs::remove_file(&record_path)
-                .map_err(|_| eros::error!(StorageError::AtomicWriteFailed).context("remove peer record"))?;
+            fs::remove_file(&record_path).map_err(|_| {
+                eros::error!(StorageError::AtomicWriteFailed).context("remove peer record")
+            })?;
             Ok(true)
         } else {
             Ok(false)
@@ -157,8 +185,11 @@ impl PeerTrustStore {
     pub fn list_active(&self) -> eros::Result<Vec<String>> {
         let mut peers = Vec::new();
         for entry in fs::read_dir(&self.peers_dir)
-            .map_err(|_| eros::error!(StorageError::AtomicReadFailed).context("read peers dir"))? {
-            let entry = entry.map_err(|_| eros::error!(StorageError::AtomicReadFailed).context("read peers entry"))?;
+            .map_err(|_| eros::error!(StorageError::AtomicReadFailed).context("read peers dir"))?
+        {
+            let entry = entry.map_err(|_| {
+                eros::error!(StorageError::AtomicReadFailed).context("read peers entry")
+            })?;
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
             if name_str.ends_with(".json") {
@@ -175,10 +206,15 @@ impl PeerTrustStore {
 
     /// Resolve the file path for a given peer UUID.
     fn resolve_path(&self, peer_id: &str) -> eros::Result<std::path::PathBuf> {
-        let parsed = uuid::Uuid::parse_str(peer_id)
-            .map_err(|_| StorageError::ValidationFailed { reason: "invalid peer id for record" })?;
+        let parsed =
+            uuid::Uuid::parse_str(peer_id).map_err(|_| StorageError::ValidationFailed {
+                reason: "invalid peer id for record",
+            })?;
         if parsed.is_nil() || parsed.to_string() != peer_id {
-            return Err(eros::error!(StorageError::ValidationFailed { reason: "invalid or nil peer id" }).context("invalid or nil peer id"));
+            return Err(eros::error!(StorageError::ValidationFailed {
+                reason: "invalid or nil peer id"
+            })
+            .context("invalid or nil peer id"));
         }
         Ok(self.peers_dir.join(format!("{peer_id}.json")))
     }

@@ -57,6 +57,10 @@ zeroize = "1"
 rcgen = { version = "0.14.10", features = ["zeroize"] }
 sha2 = "0.11.1"
 path-clean = "1.0.1"
+aes-gcm = "0.11.1"
+secret-service = { version = "5.2.0", features = ["crypto-rust"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "sync"] }
+hmac = "0.13.0"
 
 [dev-dependencies]
 x509-parser = { version = "0.18.1", features = ["verify"] }

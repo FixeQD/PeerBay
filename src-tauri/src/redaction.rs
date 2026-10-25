@@ -7,6 +7,32 @@ pub struct RedactionPolicy {
 }
 
 impl RedactionPolicy {
+    pub fn redact_token_or_fingerprint(value: &str) -> String {
+        if value.len() <= 4 {
+            return "***".to_string();
+        }
+        format!("{}***", &value[..4])
+    }
+
+    pub fn redact_path(path: &str) -> String {
+        std::path::Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| format!("<redacted_path>:{}>", n))
+            .unwrap_or_else(|| "<redacted_path>".to_string())
+    }
+
+    pub fn redact_payload(text: &str, max_preview: usize) -> String {
+        if text.len() <= max_preview {
+            return text.to_string();
+        }
+        format!(
+            "{}...[redacted {} bytes]",
+            &text[..max_preview],
+            text.len() - max_preview
+        )
+    }
+
     pub const fn privacy_safe() -> Self {
         Self {
             allow_private_paths: false,
