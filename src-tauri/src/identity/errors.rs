@@ -88,3 +88,37 @@ impl Display for IdentityKeyStoreError {
 }
 
 impl std::error::Error for IdentityKeyStoreError {}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TransportCertificateError {
+    GenerationFailed { detail: String },
+    EmptyCertificate,
+    InvalidPublicKeyLength { length: usize },
+    FingerprintMismatch,
+}
+
+impl Display for TransportCertificateError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GenerationFailed { detail } => {
+                write!(
+                    formatter,
+                    "transport certificate generation failed: {detail}"
+                )
+            }
+            Self::EmptyCertificate => write!(formatter, "transport certificate is empty"),
+            Self::InvalidPublicKeyLength { length } => write!(
+                formatter,
+                "transport certificate public key has invalid length: {length}"
+            ),
+            Self::FingerprintMismatch => {
+                write!(
+                    formatter,
+                    "transport certificate fingerprint does not match DER"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for TransportCertificateError {}

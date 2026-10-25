@@ -29,7 +29,7 @@ pub fn run() {
 }
 
 fn run_result() -> eros::Result<()> {
-    let runtime = AppRuntime::new();
+    let runtime = AppRuntime::try_new().context("create application runtime")?;
     runtime.start().context("start application runtime")?;
 
     let builder = tauri::Builder::default()

@@ -35,6 +35,30 @@ fn runtime_owns_keypair_across_clones_and_startup() {
 }
 
 #[test]
+fn runtime_owns_one_transport_certificate_across_clones_and_startup() {
+    let runtime = AppRuntime::new();
+    let clone = runtime.clone();
+    let certificate = runtime.transport_certificate();
+
+    assert_eq!(certificate.device_id(), runtime.identity().device_id());
+    assert_eq!(
+        certificate.fingerprint(),
+        clone.transport_certificate().fingerprint()
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        &certificate,
+        &clone.transport_certificate()
+    ));
+
+    runtime.start().expect("runtime should start");
+    assert_eq!(
+        runtime.transport_certificate().fingerprint(),
+        certificate.fingerprint()
+    );
+    runtime.shutdown().expect("runtime should shut down");
+}
+
+#[test]
 fn runtime_private_key_callback_matches_runtime_public_key() {
     let runtime = AppRuntime::new();
     let message = b"runtime identity proof";

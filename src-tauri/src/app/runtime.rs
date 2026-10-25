@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use eros::Context;
 
-use crate::identity::{DeviceIdentity, IdentityKeyPair, IdentityKeyStore};
+use crate::identity::{DeviceIdentity, IdentityKeyPair, IdentityKeyStore, TransportCertificate};
 
 use super::{AppState, LifecycleState, WorkerContext, WorkerSupervisor};
 
@@ -12,17 +12,32 @@ pub struct AppRuntime {
     workers: Arc<WorkerSupervisor>,
     identity: Arc<DeviceIdentity>,
     identity_keys: Arc<RwLock<IdentityKeyStore>>,
+    transport_certificate: Arc<TransportCertificate>,
 }
 
 #[allow(dead_code)]
 impl AppRuntime {
     pub fn new() -> Self {
-        Self {
+        Self::try_new().expect("PeerBay runtime identity initialization should succeed")
+    }
+
+    pub fn try_new() -> eros::Result<Self> {
+        let identity = Arc::new(DeviceIdentity::generate());
+        let transport_certificate = Arc::new(TransportCertificate::generate_for_device(
+            identity.device_id(),
+        )?);
+
+        Ok(Self {
             state: Arc::new(AppState::new()),
             workers: Arc::new(WorkerSupervisor::new()),
-            identity: Arc::new(DeviceIdentity::generate()),
+            identity,
             identity_keys: Arc::new(RwLock::new(IdentityKeyStore::generated())),
-        }
+            transport_certificate,
+        })
+    }
+
+    pub fn transport_certificate(&self) -> Arc<TransportCertificate> {
+        Arc::clone(&self.transport_certificate)
     }
 
     pub fn identity(&self) -> DeviceIdentity {

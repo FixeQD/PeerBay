@@ -54,3 +54,8 @@ uuid.workspace = true
 ed25519-dalek = { version = "3", features = ["rand_core"] }
 rand = "0.10"
 zeroize = "1"
+rcgen = { version = "0.14.10", features = ["zeroize"] }
+sha2 = "0.11.1"
+
+[dev-dependencies]
+x509-parser = { version = "0.18.1", features = ["verify"] }
