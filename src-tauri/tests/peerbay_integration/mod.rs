@@ -19,4 +19,5 @@ mod protocol_sequence;
 mod redaction;
 mod security_logging;
 mod storage;
+mod transport;
 mod viewmodel;
