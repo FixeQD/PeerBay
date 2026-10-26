@@ -17,5 +17,6 @@ mod protocol_resume;
 mod protocol_roundtrip_vectors;
 mod protocol_sequence;
 mod redaction;
+mod security_logging;
 mod storage;
 mod viewmodel;
