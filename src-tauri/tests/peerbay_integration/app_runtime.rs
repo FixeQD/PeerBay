@@ -125,7 +125,8 @@ fn tokio_worker_supervisor_handles_many_spawns() {
     let rt = AppRuntime::new();
     rt.start().expect("start ok");
     for i in 0..10 {
-        rt.spawn_worker(&format!("w{}", i), |_| {}).expect("spawn ok");
+        rt.spawn_worker(&format!("w{}", i), |_| {})
+            .expect("spawn ok");
     }
     assert_eq!(rt.active_worker_count().unwrap(), 10);
     rt.shutdown().expect("shutdown ok");

@@ -34,11 +34,13 @@ impl AppRuntime {
             identity,
             identity_keys: Arc::new(RwLock::new(IdentityKeyStore::generated())),
             transport_certificate,
-            tokio_runtime: Arc::new(tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(2)
-                .enable_all()
-                .build()
-                .expect("tokio runtime build")),
+            tokio_runtime: Arc::new(
+                tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(2)
+                    .enable_all()
+                    .build()
+                    .expect("tokio runtime build"),
+            ),
         })
     }
 
@@ -142,16 +144,14 @@ impl AppRuntime {
         }
         let workers = Arc::clone(&self.workers);
         let name = name.to_owned();
-        self.tokio_runtime.block_on(async move {
-            workers.spawn(&name, worker).await
-        })
+        self.tokio_runtime
+            .block_on(async move { workers.spawn(&name, worker).await })
     }
 
     pub fn active_worker_count(&self) -> eros::Result<usize> {
         let workers = Arc::clone(&self.workers);
-        self.tokio_runtime.block_on(async move {
-            workers.active_count().await
-        })
+        self.tokio_runtime
+            .block_on(async move { workers.active_count().await })
     }
 }
 

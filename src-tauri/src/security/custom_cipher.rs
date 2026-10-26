@@ -99,7 +99,8 @@ pub fn decrypt_custom(data: &[u8], seed: &str) -> Option<Vec<u8>> {
     }
 
     // Extract nonce and ciphertext
-    let nonce = Nonce::try_from(&bundle[header_size..header_size + nonce_len]).expect("valid nonce length");
+    let nonce =
+        Nonce::try_from(&bundle[header_size..header_size + nonce_len]).expect("valid nonce length");
     let ciphertext = &bundle[header_size + nonce_len..mac_offset];
 
     let key = aes_gcm::Key::<Aes256Gcm>::try_from(aes_key.as_slice()).expect("valid key length");

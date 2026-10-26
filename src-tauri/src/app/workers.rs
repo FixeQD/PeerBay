@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tokio::task::JoinHandle;
 
 #[derive(Clone)]

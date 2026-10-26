@@ -193,9 +193,10 @@ impl PeerTrustStore {
             if name_str.ends_with(".json") {
                 let peer_id = name_str.trim_end_matches(".json").to_string();
                 if let Ok(record) = self.load(&peer_id)
-                    && !record.is_revoked() {
-                        peers.push(peer_id);
-                    }
+                    && !record.is_revoked()
+                {
+                    peers.push(peer_id);
+                }
             }
         }
         Ok(peers)

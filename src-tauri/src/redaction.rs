@@ -54,9 +54,10 @@ impl RedactionPolicy {
             return "***".to_string();
         }
         if let Some(keyword) = redaction_keyword
-            && value.contains(keyword) {
-                return Self::redact_token_or_fingerprint(value);
-            }
+            && value.contains(keyword)
+        {
+            return Self::redact_token_or_fingerprint(value);
+        }
         // Default safe: show first 4 chars only for any secret-like string
         if value.len() > 8 {
             format!("{}***", &value[..4])
