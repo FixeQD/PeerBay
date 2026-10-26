@@ -19,6 +19,10 @@ Each peer stores its own device ID, identity key, transport certificate, certifi
 
 Private keys never leave their device. They are not exposed through the UI or protocol messages. PeerBay uses secure storage when available, otherwise it stores secrets in a locally encrypted storage area.
 
+On first start, PeerBay creates the device ID, identity key, transport certificate, fingerprint, and local device name. The identity store is encrypted when needed, versioned, validated, and written atomically. Changing the transport certificate keeps the device ID but changes the fingerprint, so existing peers ask for approval again. A full identity reset creates a new device ID and requires pairing again with every peer.
+
+Identity recovery is local. PeerBay checks the schema, key pair, certificate binding, encryption tag, file ownership, symlinks, and atomic replacement before using recovered data. Bad or tampered data is rejected without executing payloads or copying untrusted paths. A changed or revoked fingerprint still requires pairing again.
+
 Discovery only finds potential peers. Discovery responses never contain secrets or pairing tokens.
 
 Normal pairing works like this:
@@ -38,7 +42,9 @@ Pairing fails if the codes do not match. On timeout, cancellation, or rejection,
 
 USB ADB can simplify connection setup, but it does not replace PeerBay pairing. Approving Android's USB debugging prompt does not grant access to every PeerBay feature.
 
-Users can remove trusted peers and revoke permissions at any time. This includes ADB, Accessibility, MediaProjection, Shizuku, and root access on Android. Revoking access stops the affected channels and workers.
+Users can remove trusted peers or revoke individual features at any time. This includes ADB, Accessibility, MediaProjection, Shizuku, and root access on Android. Revoking access stops new operations, closes affected channels, stops related workers, clears temporary tokens and resume keys, and releases input ownership. Other features stay unchanged.
+
+Forgetting a peer removes its record, addresses, policies, cached capabilities, and session state. It does not remove the local identity or affect other peers. The forgotten peer has to pair again.
 
 ## Protocol and replay protection
 
