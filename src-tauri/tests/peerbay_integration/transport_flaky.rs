@@ -1,5 +1,5 @@
-use peerbay_lib::transport::{FlakyConfig, FlakyTransport, TransportKind, Transport};
-use peerbay_lib::transport::{TransportChannel, ChannelKind, PeerEndpoint, InMemoryTransport};
+use peerbay_lib::transport::{ChannelKind, InMemoryTransport, PeerEndpoint, TransportChannel};
+use peerbay_lib::transport::{FlakyConfig, FlakyTransport, Transport, TransportKind};
 
 fn endpoint(id: &str) -> PeerEndpoint {
     PeerEndpoint::new(id, format!("memory://{}", id), TransportKind::Loopback).unwrap()
@@ -17,11 +17,14 @@ fn flaky_transport_simulates_delay_drop_reorder_and_bandwidth() {
     let inner_a = InMemoryTransport::new(endpoint("peer-flaky-a")).unwrap();
     let inner_b = InMemoryTransport::new(endpoint("peer-flaky-b")).unwrap();
     let network = peerbay_lib::transport::InMemoryNetwork::new();
-    let (inner_a, inner_b) = InMemoryTransport::pair(endpoint("peer-flaky-x"), endpoint("peer-flaky-y")).unwrap();
+    let (inner_a, inner_b) =
+        InMemoryTransport::pair(endpoint("peer-flaky-x"), endpoint("peer-flaky-y")).unwrap();
     let flaky = FlakyTransport::new(inner_a, config);
     assert!(flaky.supports(ChannelKind::Control));
     assert_eq!(flaky.kind(), TransportKind::Loopback);
-    let channel = flaky.open(&endpoint("peer-flaky-y"), ChannelKind::Control).unwrap();
+    let channel = flaky
+        .open(&endpoint("peer-flaky-y"), ChannelKind::Control)
+        .unwrap();
     let metrics = flaky.metrics(&channel).unwrap();
     assert!(metrics.degraded);
     assert_eq!(metrics.throughput_bytes_per_second, Some(1024));

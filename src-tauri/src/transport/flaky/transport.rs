@@ -1,5 +1,7 @@
-use crate::transport::{Transport, TransportChannel, TransportKind, ChannelKind, PeerEndpoint, TransportMetrics};
 use super::{FlakyConfig, FlakyTransportError};
+use crate::transport::{
+    ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
+};
 use std::time::Duration;
 
 pub struct FlakyTransport<T: Transport> {
@@ -14,9 +16,13 @@ impl<T: Transport> FlakyTransport<T> {
 }
 
 impl<T: Transport + Clone> Transport for FlakyTransport<T> {
-    fn kind(&self) -> TransportKind { self.inner.kind() }
+    fn kind(&self) -> TransportKind {
+        self.inner.kind()
+    }
 
-    fn discover(&self) -> eros::Result<Vec<PeerEndpoint>> { self.inner.discover() }
+    fn discover(&self) -> eros::Result<Vec<PeerEndpoint>> {
+        self.inner.discover()
+    }
 
     fn open(&self, peer: &PeerEndpoint, channel: ChannelKind) -> eros::Result<TransportChannel> {
         self.inner.open(peer, channel)
@@ -31,13 +37,20 @@ impl<T: Transport + Clone> Transport for FlakyTransport<T> {
         if self.config.bandwidth_bytes.is_some() {
             metrics.throughput_bytes_per_second = self.config.bandwidth_bytes;
         }
-        metrics.degraded = metrics.degraded || self.config.drop_rate > 0.0 || self.config.delay_ms > 0;
+        metrics.degraded =
+            metrics.degraded || self.config.drop_rate > 0.0 || self.config.delay_ms > 0;
         Ok(metrics)
     }
 
-    fn supports(&self, channel: ChannelKind) -> bool { self.inner.supports(channel) }
+    fn supports(&self, channel: ChannelKind) -> bool {
+        self.inner.supports(channel)
+    }
 
-    fn migrate(&self, channel: &TransportChannel, target: TransportKind) -> eros::Result<TransportChannel> {
+    fn migrate(
+        &self,
+        channel: &TransportChannel,
+        target: TransportKind,
+    ) -> eros::Result<TransportChannel> {
         self.inner.migrate(channel, target)
     }
 }

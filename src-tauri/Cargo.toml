@@ -59,7 +59,7 @@ sha2 = "0.11.1"
 path-clean = "1.0.1"
 aes-gcm = "0.11.1"
 secret-service = { version = "5.2.0", features = ["crypto-rust"] }
-tokio = { version = "1.54.1", features = ["rt", "macros", "sync"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "sync", "net", "io-util", "time"] }
 hmac = "0.13.0"
 tokio-tungstenite = "0.30.0"
 
