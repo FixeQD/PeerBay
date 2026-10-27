@@ -21,4 +21,5 @@ mod security_logging;
 mod storage;
 mod transport;
 mod transport_in_memory;
+mod transport_flaky;
 mod viewmodel;
