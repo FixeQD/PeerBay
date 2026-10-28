@@ -81,6 +81,10 @@ impl TransportCertificate {
         &self.certificate_der
     }
 
+    pub fn private_key_der(&self) -> &[u8] {
+        self.private_key_der.as_slice()
+    }
+
     pub fn public_key_bytes(&self) -> &[u8; 32] {
         &self.public_key
     }

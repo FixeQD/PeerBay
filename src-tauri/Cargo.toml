@@ -55,6 +55,7 @@ ed25519-dalek = { version = "3", features = ["rand_core"] }
 rand = "0.10"
 zeroize = "1"
 rcgen = { version = "0.14.10", features = ["zeroize"] }
+rustls = "0.23"
 sha2 = "0.11.1"
 path-clean = "1.0.1"
 aes-gcm = "0.11.1"

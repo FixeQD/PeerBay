@@ -9,6 +9,7 @@ mod kinds;
 mod metrics;
 mod ports;
 mod tcp;
+mod tls;
 
 pub use channel::TransportChannel;
 pub use endpoint::PeerEndpoint;
@@ -22,3 +23,4 @@ pub use tcp::{
     LoopbackTcpTransport, LoopbackTcpTransportConfig, TcpConfig, TcpError, TcpTransport,
     TcpTransportConfig, TcpTransportError,
 };
+pub use tls::{TlsConfig, TlsError, TlsTransport, TlsTransportConfig, TlsTransportError};
