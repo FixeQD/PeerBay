@@ -1,5 +1,6 @@
 mod app_runtime;
 mod discovery_mdns;
+mod discovery_registry;
 mod discovery_udp;
 mod identity;
 mod platform_android;

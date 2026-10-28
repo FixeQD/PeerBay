@@ -9,6 +9,7 @@ pub enum DiscoveryError {
     InvalidSize { length: usize, max: usize },
     InvalidBeacon,
     ReceiveTimeout,
+    TooManyPeers,
 }
 
 impl Display for DiscoveryError {
@@ -23,6 +24,7 @@ impl Display for DiscoveryError {
             }
             Self::InvalidBeacon => write!(formatter, "invalid discovery beacon"),
             Self::ReceiveTimeout => write!(formatter, "discovery receive timed out"),
+            Self::TooManyPeers => write!(formatter, "discovery peer table is full"),
         }
     }
 }
