@@ -76,7 +76,7 @@ impl DiscoveryService {
                 max: self.config.max_message_size,
             });
         }
-        let socket = UdpSocket::bind(format!("0.0.0.0:0")).map_err(|_| DiscoveryError::BindFailed)?;
+        let socket = UdpSocket::bind("0.0.0.0:0".to_string()).map_err(|_| DiscoveryError::BindFailed)?;
         socket
             .set_broadcast(true)
             .map_err(|_| DiscoveryError::Io)?;

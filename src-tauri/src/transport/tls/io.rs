@@ -76,14 +76,13 @@ impl TlsTransport {
             .connections
             .get_mut(channel.id())
             .ok_or_else(|| eros::error!(TlsTransportError::ChannelNotFound))?;
-        if let Err(error) = stream.complete_io() {
-            if error.kind() != std::io::ErrorKind::WouldBlock
-                && error.kind() != std::io::ErrorKind::TimedOut
-            {
-                return Err(eros::error!(TlsTransportError::Tls {
-                    detail: error.to_string()
-                }));
-            }
+        if let Err(error) = stream.complete_io()
+            && error.kind() != std::io::ErrorKind::WouldBlock
+            && error.kind() != std::io::ErrorKind::TimedOut
+        {
+            return Err(eros::error!(TlsTransportError::Tls {
+                detail: error.to_string()
+            }));
         }
         let length = u32::try_from(payload.len()).unwrap_or(u32::MAX);
         stream.write_all(&length.to_be_bytes()).map_err(|e| {
@@ -414,14 +413,15 @@ impl Transport for TlsTransport {
                 .cloned()
                 .ok_or_else(|| eros::error!(TlsTransportError::ChannelNotFound))?
         };
-        if {
+        let closed = {
             let state = self.state.lock().map_err(|_| {
                 eros::error!(TlsTransportError::Io {
                     operation: "migrate"
                 })
             })?;
             state.closed.contains(channel.id())
-        } {
+        };
+        if closed {
             return Err(eros::error!(TlsTransportError::ChannelClosed));
         }
         let peer_address = peer

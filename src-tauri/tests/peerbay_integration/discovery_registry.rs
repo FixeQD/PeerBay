@@ -1,7 +1,6 @@
 use peerbay_lib::discovery::{DiscoveryAddress, DiscoveryRegistry};
 use std::net::SocketAddr;
 use std::str::FromStr;
-use std::thread;
 use std::time::{Duration, Instant};
 
 fn sa(s: &str) -> SocketAddr {

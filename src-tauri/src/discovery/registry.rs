@@ -102,10 +102,10 @@ impl DiscoveryRegistry {
 
         let inserted = !self.peers.contains_key(device_id);
 
-        if let Some(existing) = self.peers.get(device_id) {
-            if now < existing.last_seen {
-                return Ok(false);
-            }
+        if let Some(existing) = self.peers.get(device_id)
+            && now < existing.last_seen
+        {
+            return Ok(false);
         }
 
         // Avoid identity-flood eviction starvation, reject rather than silently replacing.
@@ -155,14 +155,10 @@ impl DiscoveryRegistry {
                 };
                 // Drop only addresses that have gone stale preserving recently observed ones
                 peer.addresses
-                    .retain(|_, address| address.last_seen.checked_add(self.address_timeout).map_or(false, |deadline| now <= deadline));
+                    .retain(|_, address| address.last_seen.checked_add(self.address_timeout).is_some_and(|deadline| now <= deadline));
 
-                let device_expired = peer.last_seen.checked_add(self.device_timeout).map_or(true, |deadline| now > deadline);
-                if device_expired || peer.addresses.is_empty() {
-                    true
-                } else {
-                    false
-                }
+                let device_expired = peer.last_seen.checked_add(self.device_timeout).is_none_or(|deadline| now > deadline);
+                device_expired || peer.addresses.is_empty()
             };
             if expired {
                 self.peers.remove(&device_id);

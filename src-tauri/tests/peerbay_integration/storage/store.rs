@@ -307,7 +307,7 @@ fn migration_recovery_copies_current_state() {
 fn exploit_symlink_tmp_points_to_etc_passwd() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("symlink_tmp.json");
-    fs::File::create(&path.with_extension("tmp")).unwrap();
+    fs::File::create(path.with_extension("tmp")).unwrap();
     let store = VersionedJsonStore::<Fixture>::new(&path);
     store
         .save(&Fixture {
@@ -617,15 +617,15 @@ fn encrypted_fallback_roundtrip_and_rejects_tampered_nonce() {
 
 fn redaction_does_not_leak_token_fingerprint_or_path() {
     let policy = peerbay_lib::redaction::RedactionPolicy::privacy_safe();
-    assert_eq!(policy.is_privacy_safe(), true);
+    assert!(policy.is_privacy_safe());
     assert!(
         peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint(
-            &"deadbeef123456789012345678901234567890123456789012345678901234"
+            "deadbeef123456789012345678901234567890123456789012345678901234"
         )
         .starts_with("dead")
     );
     assert!(
-        peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint(&"deadbeef")
+        peerbay_lib::redaction::RedactionPolicy::redact_token_or_fingerprint("deadbeef")
             .contains("***")
     );
     assert!(

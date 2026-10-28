@@ -4,6 +4,7 @@ mod commands;
 mod events;
 mod features;
 pub mod identity;
+pub mod pairing;
 pub mod platform;
 pub mod protocol;
 pub mod redaction;

@@ -3,6 +3,7 @@ mod discovery_mdns;
 mod discovery_registry;
 mod discovery_udp;
 mod identity;
+mod pairing_nonce_exchange;
 mod platform_android;
 mod platform_capability;
 mod protocol_android_fixtures;

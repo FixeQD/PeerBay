@@ -169,7 +169,7 @@ impl MdnsService {
 
         let socket = UdpSocket::bind(format!("{}:0", self.config.bind_address))
             .map_err(|_| DiscoveryError::BindFailed)?;
-        if self.config.group.parse::<IpAddr>().map_or(false, |ip| ip.is_multicast()) {
+        if self.config.group.parse::<IpAddr>().is_ok_and(|ip| ip.is_multicast()) {
             socket
                 .set_multicast_ttl_v4(1)
                 .map_err(|_| DiscoveryError::Io)?;

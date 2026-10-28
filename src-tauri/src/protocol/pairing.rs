@@ -53,6 +53,8 @@ impl PairingStart {
 pub struct PairingCommit {
     pub pairing_id: String,
     pub nonce_commitment: String,
+    #[serde(default)]
+    pub certificate_fingerprint: Option<String>,
 }
 
 impl PairingCommit {
@@ -63,6 +65,21 @@ impl PairingCommit {
         let message = Self {
             pairing_id: pairing_id.into(),
             nonce_commitment: nonce_commitment.into(),
+            certificate_fingerprint: None,
+        };
+        message.validate()?;
+        Ok(message)
+    }
+
+    pub fn new_with_certificate(
+        pairing_id: impl Into<String>,
+        nonce_commitment: impl Into<String>,
+        certificate_fingerprint: impl Into<String>,
+    ) -> eros::Result<Self> {
+        let message = Self {
+            pairing_id: pairing_id.into(),
+            nonce_commitment: nonce_commitment.into(),
+            certificate_fingerprint: Some(certificate_fingerprint.into()),
         };
         message.validate()?;
         Ok(message)
@@ -70,7 +87,25 @@ impl PairingCommit {
 
     pub fn validate(&self) -> eros::Result<()> {
         validate_pairing_id(&self.pairing_id)?;
-        validate_hex_256("nonce_commitment", &self.nonce_commitment)
+        validate_hex_256("nonce_commitment", &self.nonce_commitment)?;
+        if let Some(fingerprint) = &self.certificate_fingerprint {
+            if fingerprint.len() != HEX_256_LENGTH {
+                return Err(eros::error!(PairingError::InvalidHexLength {
+                    field: "certificate_fingerprint",
+                    length: fingerprint.len(),
+                    expected: HEX_256_LENGTH,
+                }));
+            }
+            if !fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err(eros::error!(PairingError::InvalidHexValue {
+                    field: "certificate_fingerprint"
+                }));
+            }
+        }
+        Ok(())
     }
 }
 
