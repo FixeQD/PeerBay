@@ -1,13 +1,12 @@
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 
 use super::config::TlsTransportConfig;
 use super::errors::TlsTransportError;
-use super::state::{TlsStream, TlsTransportState};
+use super::state::TlsTransportState;
 use crate::identity::TransportCertificate;
 use crate::transport::{PeerEndpoint, TransportKind};
 
@@ -84,6 +83,16 @@ impl TlsTransport {
             })
         })?;
 
+        if let Some(pinned) = peer_certificate_der.as_ref() {
+            let mut roots = rustls::RootCertStore::empty();
+            roots
+                .add(CertificateDer::from(pinned.clone()))
+                .map_err(|error| {
+                    eros::error!(TlsTransportError::Tls {
+                        detail: error.to_string()
+                    })
+                })?;
+        }
         let cert_der = CertificateDer::from(certificate.certificate_der().to_vec());
         let key = rustls::pki_types::PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             certificate.private_key_der().to_vec(),
@@ -117,8 +126,26 @@ impl TlsTransport {
         second: PeerEndpoint,
         config: TlsTransportConfig,
     ) -> eros::Result<(Self, Self)> {
-        let first_transport = Self::with_config(first, config)?;
-        let second_transport = Self::with_config(second, config)?;
+        first.validate()?;
+        second.validate()?;
+        let first_certificate =
+            crate::identity::TransportCertificate::generate_for_device(first.device_id.clone())?;
+        let second_certificate =
+            crate::identity::TransportCertificate::generate_for_device(second.device_id.clone())?;
+        let first_cert_der = first_certificate.certificate_der().to_vec();
+        let second_cert_der = second_certificate.certificate_der().to_vec();
+        let first_transport = Self::with_certificate_and_config(
+            first,
+            first_certificate,
+            Some(second_cert_der),
+            config,
+        )?;
+        let second_transport = Self::with_certificate_and_config(
+            second,
+            second_certificate,
+            Some(first_cert_der),
+            config,
+        )?;
         Ok((first_transport, second_transport))
     }
 

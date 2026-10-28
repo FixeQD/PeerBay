@@ -1,8 +1,7 @@
-use super::{FlakyConfig, FlakyTransportError};
+use super::FlakyConfig;
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
 };
-use std::time::Duration;
 
 pub struct FlakyTransport<T: Transport> {
     inner: T,

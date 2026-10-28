@@ -2,9 +2,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
-use super::{
-    errors::TcpTransportError, state::TcpTransportState, transport::TcpTransport,
-};
+use super::{errors::TcpTransportError, transport::TcpTransport};
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
 };
@@ -70,7 +68,7 @@ impl TcpTransport {
             }));
         }
         let mut stream = {
-            let mut state = self
+            let state = self
                 .state
                 .lock()
                 .map_err(|_| eros::error!(TcpTransportError::Io { operation: "send" }))?;
@@ -414,7 +412,7 @@ impl Transport for TcpTransport {
             return Err(eros::error!(TcpTransportError::ChannelClosed));
         }
         let kind = channel.kind();
-        let mut stream = TcpStream::connect(&peer.address).map_err(|_| {
+        let stream = TcpStream::connect(&peer.address).map_err(|_| {
             eros::error!(TcpTransportError::ConnectFailed {
                 address: peer.address.clone(),
             })

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::transport::{PeerEndpoint, TransportChannel};
+use crate::transport::PeerEndpoint;
 
 pub(crate) struct TcpTransportState {
     pub(crate) next_id: u64,

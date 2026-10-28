@@ -23,4 +23,5 @@ mod transport;
 mod transport_flaky;
 mod transport_in_memory;
 mod transport_tcp;
+mod transport_tls;
 mod viewmodel;

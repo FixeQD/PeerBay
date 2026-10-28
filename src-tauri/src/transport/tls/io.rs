@@ -3,18 +3,10 @@ use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustls::DigitallySignedStruct;
-use rustls::Error as RustlsError;
-use rustls::SignatureScheme;
-use rustls::client::danger::ServerCertVerifier;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified};
 use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, ServerConnection, StreamOwned};
 
-use super::{
-    config::TlsTransportConfig, errors::TlsTransportError, state::TlsStream,
-    transport::TlsTransport, verifier::NoServerVerifier,
-};
+use super::{errors::TlsTransportError, state::TlsStream, transport::TlsTransport};
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
 };
@@ -29,7 +21,7 @@ impl TlsTransport {
                     })
                 })?;
                 stream
-                    .set_read_timeout(Some(Duration::from_millis(1)))
+                    .set_read_timeout(Some(Duration::from_secs(5)))
                     .map_err(|_| {
                         eros::error!(TlsTransportError::Io {
                             operation: "accept"
@@ -94,19 +86,19 @@ impl TlsTransport {
             }
         }
         let length = u32::try_from(payload.len()).unwrap_or(u32::MAX);
-        stream.write_all(&length.to_be_bytes()).map_err(|_| {
-            eros::error!(TlsTransportError::Io {
-                operation: "send length"
+        stream.write_all(&length.to_be_bytes()).map_err(|e| {
+            eros::error!(TlsTransportError::Tls {
+                detail: e.to_string()
             })
         })?;
-        stream.write_all(&payload).map_err(|_| {
-            eros::error!(TlsTransportError::Io {
-                operation: "send payload"
+        stream.write_all(&payload).map_err(|e| {
+            eros::error!(TlsTransportError::Tls {
+                detail: e.to_string()
             })
         })?;
-        stream.flush().map_err(|_| {
-            eros::error!(TlsTransportError::Io {
-                operation: "send flush"
+        stream.flush().map_err(|e| {
+            eros::error!(TlsTransportError::Tls {
+                detail: e.to_string()
             })
         })?;
         Ok(())
@@ -320,16 +312,36 @@ impl Transport for TlsTransport {
             })
         })?;
         stream
-            .set_read_timeout(Some(Duration::from_millis(1)))
+            .set_read_timeout(Some(Duration::from_secs(5)))
             .map_err(|_| eros::error!(TlsTransportError::Io { operation: "open" }))?;
-        let server_name = ServerName::try_from("localhost").map_err(|e| {
+        let server_name =
+            ServerName::try_from(format!("peerbay-{}", peer.device_id)).map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
+        let pinned = self.peer_certificate_der.as_ref().ok_or_else(|| {
             eros::error!(TlsTransportError::Tls {
-                detail: e.to_string()
+                detail: "pinned peer certificate is required".to_owned()
             })
         })?;
+        let mut roots = rustls::RootCertStore::empty();
+        roots
+            .add(CertificateDer::from(pinned.clone()))
+            .map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
+        let verifier = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots))
+            .build()
+            .map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
         let client_config = ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoServerVerifier))
+            .with_webpki_verifier(verifier)
             .with_no_client_auth();
         let conn = ClientConnection::new(Arc::new(client_config), server_name).map_err(|e| {
             eros::error!(TlsTransportError::Tls {
@@ -420,20 +432,40 @@ impl Transport for TlsTransport {
             })
         })?;
         stream
-            .set_read_timeout(Some(Duration::from_millis(1)))
+            .set_read_timeout(Some(Duration::from_secs(5)))
             .map_err(|_| {
                 eros::error!(TlsTransportError::Io {
                     operation: "migrate"
                 })
             })?;
-        let server_name = ServerName::try_from("localhost").map_err(|e| {
+        let server_name =
+            ServerName::try_from(format!("peerbay-{}", peer.device_id)).map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
+        let pinned = self.peer_certificate_der.as_ref().ok_or_else(|| {
             eros::error!(TlsTransportError::Tls {
-                detail: e.to_string()
+                detail: "pinned peer certificate is required".to_owned()
             })
         })?;
+        let mut roots = rustls::RootCertStore::empty();
+        roots
+            .add(CertificateDer::from(pinned.clone()))
+            .map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
+        let verifier = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots))
+            .build()
+            .map_err(|e| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: e.to_string()
+                })
+            })?;
         let client_config = ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoServerVerifier))
+            .with_webpki_verifier(verifier)
             .with_no_client_auth();
         let conn = ClientConnection::new(Arc::new(client_config), server_name).map_err(|e| {
             eros::error!(TlsTransportError::Tls {
@@ -454,4 +486,3 @@ impl Transport for TlsTransport {
         TransportChannel::new(channel_id, target, channel.kind())
     }
 }
-

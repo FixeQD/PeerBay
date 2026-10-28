@@ -1,4 +1,4 @@
-use peerbay_lib::transport::{ChannelKind, InMemoryTransport, PeerEndpoint, TransportChannel};
+use peerbay_lib::transport::{ChannelKind, InMemoryTransport, PeerEndpoint};
 use peerbay_lib::transport::{FlakyConfig, FlakyTransport, Transport, TransportKind};
 
 fn endpoint(id: &str) -> PeerEndpoint {
@@ -14,11 +14,9 @@ fn flaky_transport_simulates_delay_drop_reorder_and_bandwidth() {
         duplicate_rate: 0.05,
         bandwidth_bytes: Some(1024),
     };
-    let inner_a = InMemoryTransport::new(endpoint("peer-flaky-a")).unwrap();
-    let inner_b = InMemoryTransport::new(endpoint("peer-flaky-b")).unwrap();
-    let network = peerbay_lib::transport::InMemoryNetwork::new();
     let (inner_a, inner_b) =
         InMemoryTransport::pair(endpoint("peer-flaky-x"), endpoint("peer-flaky-y")).unwrap();
+    drop(inner_b);
     let flaky = FlakyTransport::new(inner_a, config);
     assert!(flaky.supports(ChannelKind::Control));
     assert_eq!(flaky.kind(), TransportKind::Loopback);
