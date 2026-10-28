@@ -31,7 +31,10 @@ fn tcp_receive_rejects_oversized_frame_length_from_raw_socket() {
     let channel = wait_for_accept(&transport);
     let result = transport.receive(&channel);
     assert!(result.is_err());
-    let error = result.unwrap_err().downcast_inner::<TcpTransportError>().unwrap();
+    let error = result
+        .unwrap_err()
+        .downcast_inner::<TcpTransportError>()
+        .unwrap();
     assert_eq!(
         error,
         TcpTransportError::MessageTooLarge {
@@ -44,11 +47,8 @@ fn tcp_receive_rejects_oversized_frame_length_from_raw_socket() {
 
 #[test]
 fn tcp_opaque_payload_roundtrips_and_preserves_bytes() {
-    let (sender, receiver) = TcpTransport::pair(
-        endpoint("peer-tcp-a", 19111),
-        endpoint("peer-tcp-b", 19112),
-    )
-    .unwrap();
+    let (sender, receiver) =
+        TcpTransport::pair(endpoint("peer-tcp-a", 19111), endpoint("peer-tcp-b", 19112)).unwrap();
     let channel = sender
         .open(&endpoint("peer-tcp-b", 19112), ChannelKind::Control)
         .unwrap();
@@ -64,8 +64,8 @@ fn tcp_opaque_payload_roundtrips_and_preserves_bytes() {
 #[test]
 fn tcp_channel_ids_are_not_spoofable() {
     let transport = TcpTransport::new(endpoint("peer-tcp-a", 19121)).unwrap();
-    let spoofed = TransportChannel::new("tcp-999999", TransportKind::Loopback, ChannelKind::Control)
-        .unwrap();
+    let spoofed =
+        TransportChannel::new("tcp-999999", TransportKind::Loopback, ChannelKind::Control).unwrap();
     assert!(transport.send(&spoofed, b"spoof".to_vec()).is_err());
     assert!(!transport.is_open(&spoofed).unwrap());
 }
@@ -82,11 +82,8 @@ fn tcp_identity_fields_reject_shell_metacharacters() {
 
 #[test]
 fn tcp_close_is_idempotent_and_clears_pending_data() {
-    let (sender, receiver) = TcpTransport::pair(
-        endpoint("peer-tcp-a", 19141),
-        endpoint("peer-tcp-b", 19142),
-    )
-    .unwrap();
+    let (sender, receiver) =
+        TcpTransport::pair(endpoint("peer-tcp-a", 19141), endpoint("peer-tcp-b", 19142)).unwrap();
     let channel = sender
         .open(&endpoint("peer-tcp-b", 19142), ChannelKind::Control)
         .unwrap();
@@ -103,25 +100,23 @@ fn tcp_close_is_idempotent_and_clears_pending_data() {
 
 #[test]
 fn tcp_migration_produces_usable_replacement_channel() {
-    let (sender, receiver) = TcpTransport::pair(
-        endpoint("peer-tcp-a", 19151),
-        endpoint("peer-tcp-b", 19152),
-    )
-    .unwrap();
+    let (sender, receiver) =
+        TcpTransport::pair(endpoint("peer-tcp-a", 19151), endpoint("peer-tcp-b", 19152)).unwrap();
     let old = sender
         .open(&endpoint("peer-tcp-b", 19152), ChannelKind::Control)
         .unwrap();
     let _old_remote = wait_for_accept(&receiver);
-    let migrated = sender
-        .migrate(&old, TransportKind::LocalNetwork)
-        .unwrap();
+    let migrated = sender.migrate(&old, TransportKind::LocalNetwork).unwrap();
     assert_ne!(migrated.id(), old.id());
     let migrated_remote = wait_for_accept(&receiver);
     sender
         .send(&migrated, b"migrated payload".to_vec())
         .unwrap();
     thread::sleep(Duration::from_millis(20));
-    let received = receiver.receive(&migrated_remote).unwrap().expect("payload");
+    let received = receiver
+        .receive(&migrated_remote)
+        .unwrap()
+        .expect("payload");
     assert_eq!(received, b"migrated payload");
 }
 
@@ -147,10 +142,7 @@ fn tcp_custom_config_rejects_oversized_send() {
     let inner = err.downcast_inner::<TcpTransportError>().unwrap();
     assert_eq!(
         inner,
-        TcpTransportError::MessageTooLarge {
-            length: 5,
-            max: 4
-        }
+        TcpTransportError::MessageTooLarge { length: 5, max: 4 }
     );
 }
 
@@ -166,7 +158,10 @@ fn tcp_receive_rejects_absurd_length_prefix_before_reading_payload() {
     let channel = wait_for_accept(&transport);
     let result = transport.receive(&channel);
     assert!(result.is_err());
-    let inner = result.unwrap_err().downcast_inner::<TcpTransportError>().unwrap();
+    let inner = result
+        .unwrap_err()
+        .downcast_inner::<TcpTransportError>()
+        .unwrap();
     assert!(matches!(inner, TcpTransportError::MessageTooLarge { .. }));
 }
 

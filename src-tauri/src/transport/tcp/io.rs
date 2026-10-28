@@ -3,8 +3,7 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 use super::{
-    config::TcpTransportConfig, errors::TcpTransportError, state::TcpTransportState,
-    transport::TcpTransport,
+    errors::TcpTransportError, state::TcpTransportState, transport::TcpTransport,
 };
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
@@ -64,18 +63,29 @@ impl TcpTransport {
                 max: self.config.max_message_size,
             }));
         }
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| eros::error!(TcpTransportError::Io { operation: "send" }))?;
-        if state.closed.contains(channel.id()) {
-            return Err(eros::error!(TcpTransportError::ChannelClosed));
+        if payload.len() > u32::MAX as usize {
+            return Err(eros::error!(TcpTransportError::MessageTooLarge {
+                length: payload.len(),
+                max: u32::MAX as usize,
+            }));
         }
-        let stream = state
-            .connections
-            .get_mut(channel.id())
-            .ok_or_else(|| eros::error!(TcpTransportError::ChannelNotFound))?;
-        let length = u32::try_from(payload.len()).unwrap_or(u32::MAX);
+        let mut stream = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| eros::error!(TcpTransportError::Io { operation: "send" }))?;
+            if state.closed.contains(channel.id()) {
+                return Err(eros::error!(TcpTransportError::ChannelClosed));
+            }
+            state
+                .connections
+                .get(channel.id())
+                .ok_or_else(|| eros::error!(TcpTransportError::ChannelNotFound))?
+                .try_clone()
+                .map_err(|_| eros::error!(TcpTransportError::Io { operation: "send" }))?
+        };
+
+        let length = u32::try_from(payload.len()).expect("checked above");
         stream.write_all(&length.to_be_bytes()).map_err(|_| {
             eros::error!(TcpTransportError::Io {
                 operation: "send length"
@@ -95,50 +105,52 @@ impl TcpTransport {
     }
 
     pub fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Vec<u8>>> {
-        let mut stream = {
-            let mut state = self.state.lock().map_err(|_| {
-                eros::error!(TcpTransportError::Io {
-                    operation: "receive"
-                })
-            })?;
-            if state.closed.contains(channel.id()) {
-                return Ok(None);
-            }
-            if !state.connections.contains_key(channel.id()) {
-                return Err(eros::error!(TcpTransportError::ChannelNotFound));
-            }
-            state
-                .connections
-                .get(channel.id())
-                .unwrap()
-                .try_clone()
-                .map_err(|_| {
+        let id = channel.id().to_owned();
+        loop {
+            let buffer_len = {
+                let state = self.state.lock().map_err(|_| {
                     eros::error!(TcpTransportError::Io {
                         operation: "receive"
                     })
-                })?
-        };
-
-        loop {
-            let mut state = self.state.lock().map_err(|_| {
-                eros::error!(TcpTransportError::Io {
-                    operation: "receive"
-                })
-            })?;
-            if state.read_buffers.get(channel.id()).unwrap().len() >= 4 {
+                })?;
+                if state.closed.contains(&id) {
+                    return Ok(None);
+                }
+                if !state.connections.contains_key(&id) {
+                    return Err(eros::error!(TcpTransportError::ChannelNotFound));
+                }
+                match state.read_buffers.get(&id) {
+                    Some(buffer) => buffer.len(),
+                    None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                }
+            };
+            if buffer_len >= 4 {
                 break;
             }
-            let needed = 4 - state.read_buffers.get(channel.id()).unwrap().len();
-            drop(state);
+            let needed = 4 - buffer_len;
             let mut chunk = vec![0_u8; needed];
-            match stream.read(&mut chunk) {
+            let read_result = {
+                let mut state = self.state.lock().map_err(|_| {
+                    eros::error!(TcpTransportError::Io {
+                        operation: "receive"
+                    })
+                })?;
+                if state.closed.contains(&id) {
+                    return Ok(None);
+                }
+                match state.connections.get_mut(&id) {
+                    Some(stream) => stream.read(&mut chunk),
+                    None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                }
+            };
+            match read_result {
                 Ok(0) => {
                     let mut state = self.state.lock().map_err(|_| {
                         eros::error!(TcpTransportError::Io {
                             operation: "receive"
                         })
                     })?;
-                    state.closed.insert(channel.id().to_owned());
+                    state.closed.insert(id.clone());
                     return Ok(None);
                 }
                 Ok(read) => {
@@ -147,15 +159,17 @@ impl TcpTransport {
                             operation: "receive"
                         })
                     })?;
-                    state
-                        .read_buffers
-                        .get_mut(channel.id())
-                        .unwrap()
-                        .extend_from_slice(&chunk[..read]);
+                    if state.closed.contains(&id) {
+                        return Ok(None);
+                    }
+                    match state.read_buffers.get_mut(&id) {
+                        Some(buffer) => buffer.extend_from_slice(&chunk[..read]),
+                        None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                    }
                 }
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::WouldBlock
-                        || error.kind() == std::io::ErrorKind::TimedOut =>
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
                 {
                     return Ok(None);
                 }
@@ -166,15 +180,24 @@ impl TcpTransport {
                 }
             }
         }
-
         let length = {
             let state = self.state.lock().map_err(|_| {
                 eros::error!(TcpTransportError::Io {
                     operation: "receive"
                 })
             })?;
-            let buffer = state.read_buffers.get(channel.id()).unwrap();
-            u32::from_be_bytes(buffer[..4].try_into().unwrap()) as usize
+            if state.closed.contains(&id) {
+                return Ok(None);
+            }
+            match state.read_buffers.get(&id) {
+                Some(buffer) => {
+                    if buffer.len() < 4 {
+                        return Ok(None);
+                    }
+                    u32::from_be_bytes(buffer[..4].try_into().unwrap()) as usize
+                }
+                None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+            }
         };
         if length > self.config.max_message_size {
             let mut state = self.state.lock().map_err(|_| {
@@ -182,34 +205,55 @@ impl TcpTransport {
                     operation: "receive"
                 })
             })?;
-            state.closed.insert(channel.id().to_owned());
+            state.closed.insert(id.clone());
             return Err(eros::error!(TcpTransportError::MessageTooLarge {
                 length,
-                max: self.config.max_message_size,
+                max: self.config.max_message_size
             }));
         }
         let total = 4 + length;
-
         loop {
-            let mut state = self.state.lock().map_err(|_| {
-                eros::error!(TcpTransportError::Io {
-                    operation: "receive"
-                })
-            })?;
-            if state.read_buffers.get(channel.id()).unwrap().len() >= total {
+            let buffer_len = {
+                let state = self.state.lock().map_err(|_| {
+                    eros::error!(TcpTransportError::Io {
+                        operation: "receive"
+                    })
+                })?;
+                if state.closed.contains(&id) {
+                    return Ok(None);
+                }
+                match state.read_buffers.get(&id) {
+                    Some(buffer) => buffer.len(),
+                    None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                }
+            };
+            if buffer_len >= total {
                 break;
             }
-            let needed = total - state.read_buffers.get(channel.id()).unwrap().len();
-            drop(state);
+            let needed = total - buffer_len;
             let mut chunk = vec![0_u8; needed];
-            match stream.read(&mut chunk) {
+            let read_result = {
+                let mut state = self.state.lock().map_err(|_| {
+                    eros::error!(TcpTransportError::Io {
+                        operation: "receive"
+                    })
+                })?;
+                if state.closed.contains(&id) {
+                    return Ok(None);
+                }
+                match state.connections.get_mut(&id) {
+                    Some(stream) => stream.read(&mut chunk),
+                    None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                }
+            };
+            match read_result {
                 Ok(0) => {
                     let mut state = self.state.lock().map_err(|_| {
                         eros::error!(TcpTransportError::Io {
                             operation: "receive"
                         })
                     })?;
-                    state.closed.insert(channel.id().to_owned());
+                    state.closed.insert(id.clone());
                     return Ok(None);
                 }
                 Ok(read) => {
@@ -218,15 +262,17 @@ impl TcpTransport {
                             operation: "receive"
                         })
                     })?;
-                    state
-                        .read_buffers
-                        .get_mut(channel.id())
-                        .unwrap()
-                        .extend_from_slice(&chunk[..read]);
+                    if state.closed.contains(&id) {
+                        return Ok(None);
+                    }
+                    match state.read_buffers.get_mut(&id) {
+                        Some(buffer) => buffer.extend_from_slice(&chunk[..read]),
+                        None => return Err(eros::error!(TcpTransportError::ChannelNotFound)),
+                    }
                 }
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::WouldBlock
-                        || error.kind() == std::io::ErrorKind::TimedOut =>
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
                 {
                     return Ok(None);
                 }
@@ -237,16 +283,22 @@ impl TcpTransport {
                 }
             }
         }
-
         let mut state = self.state.lock().map_err(|_| {
             eros::error!(TcpTransportError::Io {
                 operation: "receive"
             })
         })?;
-        let buffer = state.read_buffers.get_mut(channel.id()).unwrap();
-        let payload = buffer[4..total].to_vec();
-        buffer.drain(..total);
-        Ok(Some(payload))
+        if state.closed.contains(&id) {
+            return Ok(None);
+        }
+        match state.read_buffers.get_mut(&id) {
+            Some(buffer) => {
+                let payload = buffer[4..total].to_vec();
+                buffer.drain(..total);
+                Ok(Some(payload))
+            }
+            None => Err(eros::error!(TcpTransportError::ChannelNotFound)),
+        }
     }
 
     pub fn is_open(&self, channel: &TransportChannel) -> eros::Result<bool> {
@@ -284,7 +336,14 @@ impl Transport for TcpTransport {
         if peer.device_id == self.local.device_id {
             return Err(eros::error!(TcpTransportError::SelfConnection));
         }
-        let stream = TcpStream::connect(&peer.address).map_err(|_| {
+        let peer_address: std::net::SocketAddr = peer
+            .address
+            .parse()
+            .map_err(|_| eros::error!(TcpTransportError::InvalidLocalAddress))?;
+        if !peer_address.ip().is_loopback() {
+            return Err(eros::error!(TcpTransportError::InvalidLocalAddress));
+        }
+        let stream = TcpStream::connect(peer_address).map_err(|_| {
             eros::error!(TcpTransportError::ConnectFailed {
                 address: peer.address.clone(),
             })
@@ -311,7 +370,7 @@ impl Transport for TcpTransport {
             .state
             .lock()
             .map_err(|_| eros::error!(TcpTransportError::Io { operation: "close" }))?;
-        if let Some(mut stream) = state.connections.remove(channel.id()) {
+        if let Some(stream) = state.connections.remove(channel.id()) {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
         state.closed.insert(channel.id().to_owned());

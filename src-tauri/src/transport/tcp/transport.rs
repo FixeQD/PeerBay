@@ -30,6 +30,9 @@ impl TcpTransport {
             .address
             .parse()
             .map_err(|_| eros::error!(TcpTransportError::InvalidLocalAddress))?;
+        if !address.ip().is_loopback() {
+            return Err(eros::error!(TcpTransportError::InvalidLocalAddress));
+        }
         let listener = TcpListener::bind(address).map_err(|_| {
             eros::error!(TcpTransportError::BindFailed {
                 address: local.address.clone(),
