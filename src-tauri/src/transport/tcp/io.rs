@@ -228,8 +228,9 @@ impl TcpTransport {
             if buffer_len >= total {
                 break;
             }
-            let needed = total - buffer_len;
-            let mut chunk = vec![0_u8; needed];
+            // Avoid allocating for the entire remaining frame on every read: an attacker can trickle the payload one byte at a time otherwise causing O(frame_size) allocations repeated frame_size times.
+            let needed = (total - buffer_len).min(4096);
+            let mut chunk = vec![0_u8; needed.max(1)];
             let read_result = {
                 let mut state = self.state.lock().map_err(|_| {
                     eros::error!(TcpTransportError::Io {

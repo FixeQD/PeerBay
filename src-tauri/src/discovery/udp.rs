@@ -35,6 +35,9 @@ impl DiscoveryBeacon {
             || self.platform != self.platform.trim()
             || self.platform.chars().any(char::is_control)
             || self.platform.chars().any(is_disallowed_format_character)
+            || self.platform.chars().any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
+            || self.platform.len() > 128
+            || self.device_id.len() > 256
         {
             return Err(DiscoveryError::InvalidBeacon);
         }

@@ -92,13 +92,16 @@ impl MdnsAdvertisement {
     }
 
     pub fn validate(&self) -> Result<(), DiscoveryError> {
-        if self.service_type.is_empty()
+        if self.service_type != "_peerbay._tcp.local"
             || self.instance_name.trim().is_empty()
             || self.instance_name != self.instance_name.trim()
             || self.instance_name.chars().any(char::is_control)
+            || self.instance_name.chars().any(is_disallowed_format_character)
             || self.platform.trim().is_empty()
             || self.platform != self.platform.trim()
             || self.platform.chars().any(char::is_control)
+            || self.platform.chars().any(is_disallowed_format_character)
+            || self.service_type.chars().any(is_disallowed_format_character)
         {
             return Err(DiscoveryError::InvalidBeacon);
         }
@@ -108,19 +111,39 @@ impl MdnsAdvertisement {
         {
             return Err(DiscoveryError::InvalidBeacon);
         }
+        if self.port == 0 {
+            return Err(DiscoveryError::InvalidBeacon);
+        }
+        if self.text.len() > 64 {
+            return Err(DiscoveryError::InvalidBeacon);
+        }
         for (key, value) in &self.text {
             if key.trim().is_empty()
                 || key != key.trim()
+                || key.len() > 64
                 || !key.chars().all(|character| {
                     character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
                 })
                 || value.chars().any(char::is_control)
+                || value.chars().any(is_disallowed_format_character)
+                || value.len() > 256
             {
                 return Err(DiscoveryError::InvalidBeacon);
             }
         }
         Ok(())
     }
+}
+
+fn is_disallowed_format_character(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}'
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -144,7 +167,8 @@ impl MdnsService {
             });
         }
 
-        let socket = UdpSocket::bind(format!("0.0.0.0:0")).map_err(|_| DiscoveryError::BindFailed)?;
+        let socket = UdpSocket::bind(format!("{}:0", self.config.bind_address))
+            .map_err(|_| DiscoveryError::BindFailed)?;
         if self.config.group.parse::<IpAddr>().map_or(false, |ip| ip.is_multicast()) {
             socket
                 .set_multicast_ttl_v4(1)
