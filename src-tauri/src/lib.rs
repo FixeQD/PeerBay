@@ -1,4 +1,5 @@
 pub mod app;
+pub mod discovery;
 mod commands;
 mod events;
 mod features;
