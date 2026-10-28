@@ -35,9 +35,21 @@ impl DiscoveryConfig {
                 max: 64 * 1024,
             });
         }
-        if self.bind_address.trim().is_empty() || self.target_address.trim().is_empty() {
-            return Err(super::errors::DiscoveryError::InvalidAddress);
-        }
+        validate_address(&self.bind_address)?;
+        validate_address(&self.target_address)?;
         Ok(())
     }
+}
+
+fn validate_address(value: &str) -> Result<(), super::errors::DiscoveryError> {
+    if value.trim().is_empty() || value != value.trim() {
+        return Err(super::errors::DiscoveryError::InvalidAddress);
+    }
+    if value.len() > 253 || value.chars().any(char::is_control) {
+        return Err(super::errors::DiscoveryError::InvalidAddress);
+    }
+    value
+        .parse::<std::net::IpAddr>()
+        .map_err(|_| super::errors::DiscoveryError::InvalidAddress)?;
+    Ok(())
 }

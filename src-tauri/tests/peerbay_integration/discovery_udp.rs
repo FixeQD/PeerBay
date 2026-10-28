@@ -72,8 +72,58 @@ fn discovery_udp_rejects_shell_metacharacters_in_beacon_id() {
 }
 
 #[test]
+fn discovery_rejects_oversized_datagram() {
+    use std::net::UdpSocket;
+
+    let port = 19893;
+    let config = DiscoveryConfig {
+        port,
+        target_address: "127.0.0.1".to_owned(),
+        bind_address: "127.0.0.1".to_owned(),
+        max_message_size: 4,
+    };
+    let service = DiscoveryService::new(config).unwrap();
+    let handle = thread::spawn(move || {
+        let result = service.receive(Duration::from_millis(200));
+        assert!(matches!(result, Err(DiscoveryError::InvalidSize { .. })));
+    });
+
+    thread::sleep(Duration::from_millis(50));
+    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+    socket.send_to(&[0_u8; 100], format!("127.0.0.1:{}", port)).unwrap();
+    handle.join().unwrap();
+}
+
+#[test]
+fn discovery_unicode_platform_is_rejected() {
+    let result = DiscoveryBeacon::new(
+        "peer-unicode".to_owned(),
+        String::from("linux\u{202e}"),
+        18080,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn discovery_config_rejects_non_address() {
+    let config = DiscoveryConfig {
+        bind_address: "localhost".to_owned(),
+        ..DiscoveryConfig::default()
+    };
+    assert!(DiscoveryService::new(config).is_err());
+
+    let config = DiscoveryConfig {
+        target_address: "example.com".to_owned(),
+        ..DiscoveryConfig::default()
+    };
+    assert!(DiscoveryService::new(config).is_err());
+}
+
+#[test]
 fn discovery_rejects_oversized_configuration() {
-    let mut config = DiscoveryConfig::default();
-    config.max_message_size = 100_000;
+    let config = DiscoveryConfig {
+        max_message_size: 100_000,
+        ..DiscoveryConfig::default()
+    };
     assert!(DiscoveryService::new(config).is_err());
 }

@@ -34,11 +34,23 @@ impl DiscoveryBeacon {
         if self.platform.trim().is_empty()
             || self.platform != self.platform.trim()
             || self.platform.chars().any(char::is_control)
+            || self.platform.chars().any(is_disallowed_format_character)
         {
             return Err(DiscoveryError::InvalidBeacon);
         }
         Ok(())
     }
+}
+
+fn is_disallowed_format_character(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}'
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -77,7 +89,7 @@ impl DiscoveryService {
         socket
             .set_read_timeout(Some(timeout))
             .map_err(|_| DiscoveryError::Io)?;
-        let mut buffer = vec![0_u8; self.config.max_message_size];
+        let mut buffer = vec![0_u8; self.config.max_message_size + 1];
         let (size, source) = socket.recv_from(&mut buffer).map_err(|error| {
             if error.kind() == std::io::ErrorKind::TimedOut
                 || error.kind() == std::io::ErrorKind::WouldBlock

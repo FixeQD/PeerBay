@@ -306,6 +306,9 @@ impl Transport for TlsTransport {
             .address
             .parse::<std::net::SocketAddr>()
             .map_err(|_| eros::error!(TlsTransportError::InvalidLocalAddress))?;
+        if !peer_addr.ip().is_loopback() {
+            return Err(eros::error!(TlsTransportError::InvalidLocalAddress));
+        }
         let stream = TcpStream::connect(peer_addr).map_err(|_| {
             eros::error!(TlsTransportError::ConnectFailed {
                 address: peer.address.clone()
@@ -421,12 +424,14 @@ impl Transport for TlsTransport {
         } {
             return Err(eros::error!(TlsTransportError::ChannelClosed));
         }
-        let stream = TcpStream::connect(
-            peer.address
-                .parse::<std::net::SocketAddr>()
-                .map_err(|_| eros::error!(TlsTransportError::InvalidLocalAddress))?,
-        )
-        .map_err(|_| {
+        let peer_address = peer
+            .address
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| eros::error!(TlsTransportError::InvalidLocalAddress))?;
+        if !peer_address.ip().is_loopback() {
+            return Err(eros::error!(TlsTransportError::InvalidLocalAddress));
+        }
+        let stream = TcpStream::connect(peer_address).map_err(|_| {
             eros::error!(TlsTransportError::ConnectFailed {
                 address: peer.address.clone()
             })
