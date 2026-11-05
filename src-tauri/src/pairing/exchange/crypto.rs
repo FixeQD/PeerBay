@@ -54,3 +54,11 @@ pub(super) fn hash_nonce(nonce: &[u8], pairing_id: &str, fingerprint: &str, role
     hasher.update(nonce);
     hex_encode(hasher.finalize().as_slice())
 }
+
+/// Current wall-clock time in milliseconds since the UNIX epoch
+pub(super) fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}

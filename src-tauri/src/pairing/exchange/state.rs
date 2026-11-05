@@ -1,16 +1,16 @@
-use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
-use super::crypto::*;
-use super::validation::*;
-use super::types::*;
 use super::PairingExchange;
+use super::crypto::*;
+use super::types::*;
+use super::validation::*;
+use crate::pairing::PairingExchangeError;
+use crate::protocol::pairing::{PairingCode, PairingConfirm};
 
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use zeroize::{Zeroize, Zeroizing};
 
 impl PairingExchange {
-pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
+    pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
         self.ensure_active()?;
         if self.state != PairingExchangeState::Revealed {
             return Err(PairingExchangeError::StateMismatch {
@@ -18,7 +18,10 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
                 got: self.state.as_str(),
             });
         }
-        let peer_nonce = self.peer_nonce.as_ref().ok_or(PairingExchangeError::MissingPeerNonce)?;
+        let peer_nonce = self
+            .peer_nonce
+            .as_ref()
+            .ok_or(PairingExchangeError::MissingPeerNonce)?;
         let (initiator_nonce, responder_nonce, initiator_fingerprint, responder_fingerprint) =
             if self.role == PairingRole::Initiator {
                 (
@@ -52,6 +55,58 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
         })
     }
 
+    /// Builds the `pair.code` message carrying the locally computed SAS code
+    pub fn emit_pairing_code(
+        &mut self,
+        code_lifetime_ms: u64,
+    ) -> Result<PairingCode, PairingExchangeError> {
+        if code_lifetime_ms == 0 {
+            return Err(PairingExchangeError::InvalidSasCodeLifetime);
+        }
+        let sas = self.sas_code()?;
+        let expires_at_ms = now_ms().saturating_add(code_lifetime_ms);
+        // Pairing code validation cannot fail here, the pairing id, the SAS code and the expiry were all validated before this point
+        Ok(
+            PairingCode::new(self.pairing_id.clone(), sas.code, expires_at_ms)
+                .expect("pairing code construction is infallible after validation"),
+        )
+    }
+
+    /// Verifies an incoming `pair.confirm` against the locally computed SAS code
+    pub fn verify_pairing_confirm(
+        &mut self,
+        confirm: &PairingConfirm,
+    ) -> Result<(), PairingExchangeError> {
+        self.ensure_active()?;
+        if self.state != PairingExchangeState::Revealed {
+            return Err(PairingExchangeError::StateMismatch {
+                expected: "revealed",
+                got: self.state.as_str(),
+            });
+        }
+        if confirm.pairing_id != self.pairing_id {
+            return Err(PairingExchangeError::InvalidPairingId);
+        }
+        if !confirm.confirmed {
+            self.state = PairingExchangeState::Rejected;
+            self.invalidate_secrets();
+            return Err(PairingExchangeError::UserDenied);
+        }
+        let expected_code = self.sas_code()?.code;
+        let provided_code = confirm
+            .sas_code
+            .as_deref()
+            .ok_or(PairingExchangeError::MissingPeerNonce)?;
+        if provided_code != expected_code {
+            self.state = PairingExchangeState::Rejected;
+            self.invalidate_secrets();
+            return Err(PairingExchangeError::SasCodeMismatch);
+        }
+        self.state = PairingExchangeState::Confirmed;
+        self.invalidate_secrets();
+        Ok(())
+    }
+
     pub fn role(&self) -> PairingRole {
         self.role
     }
@@ -73,6 +128,14 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
     }
 
     pub fn is_expired(&self) -> bool {
+        if matches!(
+            self.state,
+            PairingExchangeState::Confirmed
+                | PairingExchangeState::Completed
+                | PairingExchangeState::Rejected
+        ) {
+            return false;
+        }
         self.state == PairingExchangeState::TimedOut
             || self.state == PairingExchangeState::Cancelled
             || self.created_at.elapsed() >= self.timeout
@@ -82,6 +145,7 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
         if matches!(
             self.state,
             PairingExchangeState::Completed
+                | PairingExchangeState::Confirmed
                 | PairingExchangeState::Rejected
                 | PairingExchangeState::Cancelled
                 | PairingExchangeState::TimedOut
@@ -98,7 +162,13 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
     }
 
     pub fn cancel(&mut self) {
-        if !matches!(self.state, PairingExchangeState::Completed | PairingExchangeState::Cancelled) {
+        if matches!(
+            self.state,
+            PairingExchangeState::Started
+                | PairingExchangeState::Committed
+                | PairingExchangeState::Revealing
+                | PairingExchangeState::Revealed
+        ) {
             self.state = PairingExchangeState::Cancelled;
             self.invalidate_secrets();
         }
@@ -115,9 +185,15 @@ pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
         self.invalidated = true;
     }
 
+    pub fn secrets_invalidated(&self) -> bool {
+        self.invalidated
+    }
+
     pub(crate) fn ensure_active(&mut self) -> Result<(), PairingExchangeError> {
         match self.state {
-            PairingExchangeState::Completed => Err(PairingExchangeError::AlreadyCompleted),
+            PairingExchangeState::Completed | PairingExchangeState::Confirmed => {
+                Err(PairingExchangeError::AlreadyCompleted)
+            }
             PairingExchangeState::Cancelled => Err(PairingExchangeError::Cancelled),
             PairingExchangeState::TimedOut => Err(PairingExchangeError::Expired),
             PairingExchangeState::Rejected => Err(PairingExchangeError::CommitmentMismatch),

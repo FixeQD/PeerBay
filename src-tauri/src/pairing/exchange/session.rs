@@ -1,5 +1,5 @@
 use super::PairingExchange;
-use crate::protocol::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
+use crate::protocol::pairing::{PairingCode, PairingCommit, PairingConfirm, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
 use crate::pairing::PairingExchangeError;
 use super::*;
 
@@ -62,8 +62,22 @@ impl PairingSession {
         guard.sas_code()
     }
 
+    pub fn emit_pairing_code(&mut self, code_lifetime_ms: u64) -> Result<PairingCode, PairingExchangeError> {
+        let mut guard = self.inner.lock().expect("pairing session mutex poisoned");
+        guard.emit_pairing_code(code_lifetime_ms)
+    }
+
+    pub fn verify_pairing_confirm(&mut self, confirm: &PairingConfirm) -> Result<(), PairingExchangeError> {
+        let mut guard = self.inner.lock().expect("pairing session mutex poisoned");
+        guard.verify_pairing_confirm(confirm)
+    }
+
     pub fn expire_if_timed_out(&self) -> bool {
         self.inner.lock().expect("pairing session mutex poisoned").expire_if_timed_out()
+    }
+
+    pub fn secrets_invalidated(&self) -> bool {
+        self.inner.lock().expect("pairing session mutex poisoned").secrets_invalidated()
     }
 
     pub fn cancel(&self) {

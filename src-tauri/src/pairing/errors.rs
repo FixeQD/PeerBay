@@ -20,6 +20,9 @@ pub enum PairingExchangeError {
     IncompleteExchange,
     TooManySessions,
     RandomFailure,
+    SasCodeMismatch,
+    UserDenied,
+    InvalidSasCodeLifetime,
 }
 
 impl Display for PairingExchangeError {
@@ -48,6 +51,11 @@ impl Display for PairingExchangeError {
             Self::IncompleteExchange => write!(formatter, "pairing exchange is not complete"),
             Self::TooManySessions => write!(formatter, "too many concurrent pairing sessions"),
             Self::RandomFailure => write!(formatter, "random nonce generation failed"),
+            Self::SasCodeMismatch => write!(formatter, "pairing SAS code does not match"),
+            Self::UserDenied => write!(formatter, "pairing was denied by the user"),
+            Self::InvalidSasCodeLifetime => {
+                write!(formatter, "pairing SAS code lifetime must be greater than zero")
+            },
         }
     }
 }
