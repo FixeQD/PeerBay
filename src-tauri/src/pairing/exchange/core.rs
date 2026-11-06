@@ -20,6 +20,7 @@ pub struct PairingExchange {
     pub(crate) created_at: Instant,
     pub(crate) timeout: Duration,
     pub(crate) invalidated: bool,
+    pub(crate) code_expires_at_ms: u64,
 }
 
 impl std::fmt::Debug for PairingExchange {

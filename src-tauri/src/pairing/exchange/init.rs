@@ -46,6 +46,7 @@ impl PairingExchange {
                 timeout
             },
             invalidated: false,
+            code_expires_at_ms: 0,
         })
     }
 
@@ -107,6 +108,7 @@ impl PairingExchange {
                 timeout
             },
             invalidated: false,
+            code_expires_at_ms: 0,
         };
 
         let commit = PairingCommit::new_with_certificate(

@@ -62,14 +62,14 @@ impl PeerRecord {
     }
 
     pub fn validate_device_id(id: &str) -> eros::Result<()> {
-        if id.trim().is_empty() {
+        let parsed = uuid::Uuid::parse_str(id).map_err(|_| {
+            eros::error!(StorageError::ValidationFailed {
+                reason: "device id is not a canonical UUID"
+            })
+        })?;
+        if parsed.is_nil() || parsed.to_string() != id {
             return Err(eros::error!(StorageError::ValidationFailed {
-                reason: "device_id empty"
-            }));
-        }
-        if id.chars().any(|c| c.is_control()) {
-            return Err(eros::error!(StorageError::ValidationFailed {
-                reason: "device_id contains control char"
+                reason: "device id is nil or not canonical"
             }));
         }
         Ok(())

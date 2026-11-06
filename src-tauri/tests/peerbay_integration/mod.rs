@@ -5,6 +5,7 @@ mod discovery_udp;
 mod identity;
 mod pairing_nonce_exchange;
 mod pairing_sas_confirmation;
+mod pairing_trust_persistence;
 mod platform_android;
 mod platform_capability;
 mod protocol_android_fixtures;

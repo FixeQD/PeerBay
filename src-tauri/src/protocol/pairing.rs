@@ -226,11 +226,22 @@ impl PairingConfirm {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PairingAccepted {
     pub pairing_id: String,
     pub session_token: String,
     pub expires_at_ms: u64,
+}
+
+impl std::fmt::Debug for PairingAccepted {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PairingAccepted")
+            .field("pairing_id", &self.pairing_id)
+            .field("session_token", &"<redacted>")
+            .field("expires_at_ms", &self.expires_at_ms)
+            .finish()
+    }
 }
 
 impl PairingAccepted {

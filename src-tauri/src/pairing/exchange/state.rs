@@ -1,13 +1,15 @@
 use super::PairingExchange;
 use super::crypto::*;
+use super::trust::SESSION_TOKEN_LIFETIME_MS;
+use super::trust::*;
 use super::types::*;
 use super::validation::*;
 use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{PairingCode, PairingConfirm};
+use crate::protocol::pairing::{PairingAccepted, PairingCode, PairingConfirm};
+use crate::storage::PeerTrustStore;
 
 use sha2::{Digest, Sha256};
-use std::time::{Duration, Instant};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
 impl PairingExchange {
     pub fn sas_code(&mut self) -> Result<PairingSas, PairingExchangeError> {
@@ -65,6 +67,7 @@ impl PairingExchange {
         }
         let sas = self.sas_code()?;
         let expires_at_ms = now_ms().saturating_add(code_lifetime_ms);
+        self.code_expires_at_ms = expires_at_ms;
         // Pairing code validation cannot fail here, the pairing id, the SAS code and the expiry were all validated before this point
         Ok(
             PairingCode::new(self.pairing_id.clone(), sas.code, expires_at_ms)
@@ -72,7 +75,23 @@ impl PairingExchange {
         )
     }
 
-    /// Verifies an incoming `pair.confirm` against the locally computed SAS code
+    /// Records the expiry of an issued pairing code propagated to this peer
+    pub fn apply_pairing_code(
+        &mut self,
+        code: &crate::protocol::pairing::PairingCode,
+    ) -> Result<(), PairingExchangeError> {
+        if code.pairing_id != self.pairing_id {
+            return Err(PairingExchangeError::InvalidPairingId);
+        }
+        code.validate()
+            .map_err(|_| PairingExchangeError::InvalidSasCodeLifetime)?;
+        if now_ms() > code.expires_at_ms {
+            return Err(PairingExchangeError::Expired);
+        }
+        self.code_expires_at_ms = code.expires_at_ms;
+        Ok(())
+    }
+
     pub fn verify_pairing_confirm(
         &mut self,
         confirm: &PairingConfirm,
@@ -83,6 +102,9 @@ impl PairingExchange {
                 expected: "revealed",
                 got: self.state.as_str(),
             });
+        }
+        if self.code_expires_at_ms != 0 && now_ms() > self.code_expires_at_ms {
+            return Err(PairingExchangeError::Expired);
         }
         if confirm.pairing_id != self.pairing_id {
             return Err(PairingExchangeError::InvalidPairingId);
@@ -104,6 +126,95 @@ impl PairingExchange {
         }
         self.state = PairingExchangeState::Confirmed;
         self.invalidate_secrets();
+        Ok(())
+    }
+
+    pub fn accept(
+        &mut self,
+        trust_store: &PeerTrustStore,
+        display_name: impl Into<String>,
+        platform: impl Into<String>,
+    ) -> Result<PairingAccepted, PairingExchangeError> {
+        if self.state != PairingExchangeState::Confirmed {
+            return Err(PairingExchangeError::StateMismatch {
+                expected: "confirmed",
+                got: self.state.as_str(),
+            });
+        }
+
+        let peer_device_id = self
+            .peer_device_id
+            .as_ref()
+            .ok_or(PairingExchangeError::MissingPeerIdentity)?
+            .clone();
+        let peer_fingerprint = self
+            .peer_fingerprint
+            .as_ref()
+            .ok_or(PairingExchangeError::MissingPeerIdentity)?
+            .clone();
+
+        let mut record =
+            build_peer_record(&peer_device_id, &peer_fingerprint, display_name, platform)?;
+        let token_hex = issue_session_token(&mut record)?;
+
+        trust_store
+            .save(&peer_device_id, &record)
+            .map_err(|_| PairingExchangeError::TrustPersistFailed)?;
+
+        let expires_at_ms = now_ms().saturating_add(SESSION_TOKEN_LIFETIME_MS);
+        let accepted = PairingAccepted::new(self.pairing_id.clone(), token_hex, expires_at_ms)
+            .map_err(|_| PairingExchangeError::InvalidSessionToken)?;
+
+        self.state = PairingExchangeState::SessionTokenIssued;
+        Ok(accepted)
+    }
+
+    pub fn apply_accepted(
+        &mut self,
+        trust_store: &PeerTrustStore,
+        peer_device_id: impl Into<String>,
+        accepted: &PairingAccepted,
+        display_name: impl Into<String>,
+        platform: impl Into<String>,
+    ) -> Result<(), PairingExchangeError> {
+        if !matches!(
+            self.state,
+            PairingExchangeState::Revealed | PairingExchangeState::Confirmed
+        ) {
+            return Err(PairingExchangeError::StateMismatch {
+                expected: "revealed or confirmed",
+                got: self.state.as_str(),
+            });
+        }
+        if accepted.pairing_id != self.pairing_id {
+            return Err(PairingExchangeError::InvalidPairingId);
+        }
+        accepted
+            .validate()
+            .map_err(|_| PairingExchangeError::InvalidSessionToken)?;
+        if accepted.expires_at_ms <= now_ms() {
+            return Err(PairingExchangeError::TokenExpired);
+        }
+        if accepted.expires_at_ms > now_ms().saturating_add(SESSION_TOKEN_LIFETIME_MS * 2) {
+            return Err(PairingExchangeError::TokenExpired);
+        }
+
+        let peer_device_id = peer_device_id.into();
+        let peer_fingerprint = self
+            .peer_fingerprint
+            .as_ref()
+            .ok_or(PairingExchangeError::MissingPeerIdentity)?
+            .clone();
+
+        let mut record =
+            build_peer_record(&peer_device_id, &peer_fingerprint, display_name, platform)?;
+        record.pairing_token_hash = hash_presented_token(&accepted.session_token)?;
+
+        trust_store
+            .save(&peer_device_id, &record)
+            .map_err(|_| PairingExchangeError::TrustPersistFailed)?;
+
+        self.state = PairingExchangeState::SessionTokenIssued;
         Ok(())
     }
 
@@ -131,6 +242,7 @@ impl PairingExchange {
         if matches!(
             self.state,
             PairingExchangeState::Confirmed
+                | PairingExchangeState::SessionTokenIssued
                 | PairingExchangeState::Completed
                 | PairingExchangeState::Rejected
         ) {
@@ -146,6 +258,7 @@ impl PairingExchange {
             self.state,
             PairingExchangeState::Completed
                 | PairingExchangeState::Confirmed
+                | PairingExchangeState::SessionTokenIssued
                 | PairingExchangeState::Rejected
                 | PairingExchangeState::Cancelled
                 | PairingExchangeState::TimedOut
@@ -168,6 +281,7 @@ impl PairingExchange {
                 | PairingExchangeState::Committed
                 | PairingExchangeState::Revealing
                 | PairingExchangeState::Revealed
+                | PairingExchangeState::Confirmed
         ) {
             self.state = PairingExchangeState::Cancelled;
             self.invalidate_secrets();
@@ -183,6 +297,7 @@ impl PairingExchange {
         }
         self.peer_nonce = None;
         self.invalidated = true;
+        self.code_expires_at_ms = 0;
     }
 
     pub fn secrets_invalidated(&self) -> bool {

@@ -23,6 +23,10 @@ pub enum PairingExchangeError {
     SasCodeMismatch,
     UserDenied,
     InvalidSasCodeLifetime,
+    MissingPeerIdentity,
+    InvalidSessionToken,
+    TrustPersistFailed,
+    TokenExpired,
 }
 
 impl Display for PairingExchangeError {
@@ -55,7 +59,17 @@ impl Display for PairingExchangeError {
             Self::UserDenied => write!(formatter, "pairing was denied by the user"),
             Self::InvalidSasCodeLifetime => {
                 write!(formatter, "pairing SAS code lifetime must be greater than zero")
-            },
+            }
+            Self::MissingPeerIdentity => {
+                write!(formatter, "peer identity is missing from the pairing exchange")
+            }
+            Self::InvalidSessionToken => {
+                write!(formatter, "pairing session token is invalid")
+            }
+            Self::TrustPersistFailed => {
+                write!(formatter, "pairing trust record could not be persisted")
+            }
+            Self::TokenExpired => write!(formatter, "pairing session token has expired"),
         }
     }
 }

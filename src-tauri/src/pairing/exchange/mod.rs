@@ -16,3 +16,5 @@ mod init;
 mod commit;
 mod reveal;
 mod state;
+mod trust;
+pub use trust::{build_peer_record, hash_presented_token, issue_session_token};
