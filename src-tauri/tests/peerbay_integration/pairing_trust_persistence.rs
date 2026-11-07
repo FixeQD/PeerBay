@@ -124,6 +124,15 @@ fn initiator_apply_accepted_persists_trust_from_peer_token() {
         .accept(&store, "Phone", "android")
         .expect("responder accept should persist trust");
 
+    let code = initiator
+        .emit_pairing_code(10_000)
+        .expect("initiator should still be able to emit its pairing code");
+    let confirm = peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
+    initiator
+        .verify_pairing_confirm(&confirm)
+        .expect("initiator should record its own SAS confirmation before applying accepted trust");
+
     initiator
         .apply_accepted(&store, RESPONDER_DEVICE_ID, &accepted, "Phone", "android")
         .expect("initiator apply_accepted should persist trust");
@@ -148,11 +157,20 @@ fn apply_accepted_rejects_expired_session_token() {
         .expect("responder accept should persist trust");
     accepted.expires_at_ms = 1;
 
+    let code = initiator
+        .emit_pairing_code(10_000)
+        .expect("initiator should still be able to emit its pairing code");
+    let confirm = peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
+    initiator
+        .verify_pairing_confirm(&confirm)
+        .expect("initiator should record its own SAS confirmation");
+
     let err = initiator
         .apply_accepted(&store, RESPONDER_DEVICE_ID, &accepted, "Phone", "android")
         .expect_err("expired token must be rejected");
     assert_eq!(err, PairingExchangeError::TokenExpired);
-    assert_eq!(initiator.state(), PairingExchangeState::Revealed);
+    assert_eq!(initiator.state(), PairingExchangeState::Confirmed);
     assert!(store.load(RESPONDER_DEVICE_ID).is_err());
 }
 
@@ -165,6 +183,15 @@ fn apply_accepted_rejects_wrong_pairing_id() {
         .accept(&store, "Phone", "android")
         .expect("responder accept should persist trust");
     accepted.pairing_id = "wrong-pairing-id".to_owned();
+
+    let code = initiator
+        .emit_pairing_code(10_000)
+        .expect("initiator should still be able to emit its pairing code");
+    let confirm = peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
+    initiator
+        .verify_pairing_confirm(&confirm)
+        .expect("initiator should record its own SAS confirmation");
 
     let err = initiator
         .apply_accepted(&store, RESPONDER_DEVICE_ID, &accepted, "Phone", "android")

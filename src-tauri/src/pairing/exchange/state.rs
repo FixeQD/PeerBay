@@ -177,12 +177,10 @@ impl PairingExchange {
         display_name: impl Into<String>,
         platform: impl Into<String>,
     ) -> Result<(), PairingExchangeError> {
-        if !matches!(
-            self.state,
-            PairingExchangeState::Revealed | PairingExchangeState::Confirmed
-        ) {
+        if self.state != PairingExchangeState::Confirmed {
+
             return Err(PairingExchangeError::StateMismatch {
-                expected: "revealed or confirmed",
+                expected: "confirmed",
                 got: self.state.as_str(),
             });
         }
