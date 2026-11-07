@@ -12,12 +12,12 @@ fn discovery_udp_roundtrips_public_beacon() {
     };
     let service = DiscoveryService::new(config.clone()).unwrap();
 
-    let handle = thread::spawn(move || {
-        match service.clone().receive(Duration::from_secs(2)) {
+    let handle = thread::spawn(
+        move || match service.clone().receive(Duration::from_secs(2)) {
             Ok(value) => value,
             Err(error) => panic!("receive failed: {}", error),
-        }
-    });
+        },
+    );
 
     let sender_config = DiscoveryConfig {
         port,
@@ -54,7 +54,9 @@ fn discovery_udp_rejects_malformed_json() {
     thread::sleep(Duration::from_millis(50));
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let payload = b"{not json}";
-    socket.send_to(payload, format!("127.0.0.1:{}", port)).unwrap();
+    socket
+        .send_to(payload, format!("127.0.0.1:{}", port))
+        .unwrap();
     handle.join().unwrap();
 }
 
@@ -90,7 +92,9 @@ fn discovery_rejects_oversized_datagram() {
 
     thread::sleep(Duration::from_millis(50));
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    socket.send_to(&[0_u8; 100], format!("127.0.0.1:{}", port)).unwrap();
+    socket
+        .send_to(&[0_u8; 100], format!("127.0.0.1:{}", port))
+        .unwrap();
     handle.join().unwrap();
 }
 

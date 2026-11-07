@@ -75,11 +75,7 @@ pub struct MdnsAdvertisement {
 }
 
 impl MdnsAdvertisement {
-    pub fn new(
-        instance_name: String,
-        platform: String,
-        port: u16,
-    ) -> Result<Self, DiscoveryError> {
+    pub fn new(instance_name: String, platform: String, port: u16) -> Result<Self, DiscoveryError> {
         let advertisement = Self {
             service_type: "_peerbay._tcp.local".to_owned(),
             instance_name,
@@ -96,12 +92,18 @@ impl MdnsAdvertisement {
             || self.instance_name.trim().is_empty()
             || self.instance_name != self.instance_name.trim()
             || self.instance_name.chars().any(char::is_control)
-            || self.instance_name.chars().any(is_disallowed_format_character)
+            || self
+                .instance_name
+                .chars()
+                .any(is_disallowed_format_character)
             || self.platform.trim().is_empty()
             || self.platform != self.platform.trim()
             || self.platform.chars().any(char::is_control)
             || self.platform.chars().any(is_disallowed_format_character)
-            || self.service_type.chars().any(is_disallowed_format_character)
+            || self
+                .service_type
+                .chars()
+                .any(is_disallowed_format_character)
         {
             return Err(DiscoveryError::InvalidBeacon);
         }
@@ -169,18 +171,29 @@ impl MdnsService {
 
         let socket = UdpSocket::bind(format!("{}:0", self.config.bind_address))
             .map_err(|_| DiscoveryError::BindFailed)?;
-        if self.config.group.parse::<IpAddr>().is_ok_and(|ip| ip.is_multicast()) {
+        if self
+            .config
+            .group
+            .parse::<IpAddr>()
+            .is_ok_and(|ip| ip.is_multicast())
+        {
             socket
                 .set_multicast_ttl_v4(1)
                 .map_err(|_| DiscoveryError::Io)?;
         }
         socket
-            .send_to(&payload, format!("{}:{}", self.config.target_address, self.config.port))
+            .send_to(
+                &payload,
+                format!("{}:{}", self.config.target_address, self.config.port),
+            )
             .map_err(|_| DiscoveryError::Io)?;
         Ok(())
     }
 
-    pub fn browse(&self, timeout: Duration) -> Result<(MdnsAdvertisement, std::net::SocketAddr), DiscoveryError> {
+    pub fn browse(
+        &self,
+        timeout: Duration,
+    ) -> Result<(MdnsAdvertisement, std::net::SocketAddr), DiscoveryError> {
         let socket = UdpSocket::bind(format!("{}:{}", self.config.bind_address, self.config.port))
             .map_err(|_| DiscoveryError::BindFailed)?;
         socket
@@ -202,10 +215,9 @@ impl MdnsService {
                 max: self.config.max_message_size,
             });
         }
-        let advertisement: MdnsAdvertisement = serde_json::from_slice(&buffer[..size])
-            .map_err(|_| DiscoveryError::InvalidJson)?;
+        let advertisement: MdnsAdvertisement =
+            serde_json::from_slice(&buffer[..size]).map_err(|_| DiscoveryError::InvalidJson)?;
         advertisement.validate()?;
         Ok((advertisement, source))
     }
 }
-

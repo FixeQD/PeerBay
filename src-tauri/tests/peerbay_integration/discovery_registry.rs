@@ -12,12 +12,16 @@ fn registry_deduplicates_same_device_by_id() {
     let mut registry = DiscoveryRegistry::new(Duration::from_secs(60), Duration::from_secs(30));
     let now = Instant::now();
 
-    assert!(registry
-        .observe("peer-a", "linux", sa("127.0.0.1:9000"), 7000, now)
-        .unwrap());
-    assert!(!registry
-        .observe("peer-a", "windows", sa("127.0.0.1:9001"), 7001, now)
-        .unwrap());
+    assert!(
+        registry
+            .observe("peer-a", "linux", sa("127.0.0.1:9000"), 7000, now)
+            .unwrap()
+    );
+    assert!(
+        !registry
+            .observe("peer-a", "windows", sa("127.0.0.1:9001"), 7001, now)
+            .unwrap()
+    );
 
     assert_eq!(registry.len(), 1);
     let peers = registry.peers();
@@ -33,7 +37,13 @@ fn registry_prunes_stale_addresses_but_keeps_peer() {
         .observe("peer-a", "linux", sa("127.0.0.1:9000"), 7000, now)
         .unwrap();
     registry
-        .observe("peer-a", "linux", sa("127.0.0.1:9001"), 7001, now + Duration::from_millis(5))
+        .observe(
+            "peer-a",
+            "linux",
+            sa("127.0.0.1:9001"),
+            7001,
+            now + Duration::from_millis(5),
+        )
         .unwrap();
 
     let expired = registry.prune(now + Duration::from_millis(12));
@@ -60,19 +70,23 @@ fn registry_prunes_expired_peers() {
 fn registry_rejects_bad_device_id() {
     let mut registry = DiscoveryRegistry::new(Duration::from_secs(10), Duration::from_secs(10));
     let now = Instant::now();
-    assert!(registry
-        .observe("$(touch /tmp/peerbay-reg-rce)", "linux", sa("127.0.0.1:9000"), 7000, now)
-        .is_err());
+    assert!(
+        registry
+            .observe(
+                "$(touch /tmp/peerbay-reg-rce)",
+                "linux",
+                sa("127.0.0.1:9000"),
+                7000,
+                now
+            )
+            .is_err()
+    );
 }
 
 #[test]
 fn registry_evicts_oldest_peer_at_capacity() {
-    let mut registry = DiscoveryRegistry::with_limits(
-        Duration::from_secs(60),
-        Duration::from_secs(30),
-        1,
-        8,
-    );
+    let mut registry =
+        DiscoveryRegistry::with_limits(Duration::from_secs(60), Duration::from_secs(30), 1, 8);
     let now = Instant::now();
     registry
         .observe("peer-a", "linux", sa("127.0.0.1:9000"), 7000, now)
@@ -93,18 +107,20 @@ fn registry_evicts_oldest_peer_at_capacity() {
 
 #[test]
 fn registry_caps_addresses_per_peer() {
-    let mut registry = DiscoveryRegistry::with_limits(
-        Duration::from_secs(60),
-        Duration::from_secs(30),
-        8,
-        1,
-    );
+    let mut registry =
+        DiscoveryRegistry::with_limits(Duration::from_secs(60), Duration::from_secs(30), 8, 1);
     let now = Instant::now();
     registry
         .observe("peer-a", "linux", sa("127.0.0.1:9000"), 7000, now)
         .unwrap();
     registry
-        .observe("peer-a", "linux", sa("127.0.0.1:9001"), 7001, now + Duration::from_secs(1))
+        .observe(
+            "peer-a",
+            "linux",
+            sa("127.0.0.1:9001"),
+            7001,
+            now + Duration::from_secs(1),
+        )
         .unwrap();
 
     let peer = registry.get("peer-a").unwrap();

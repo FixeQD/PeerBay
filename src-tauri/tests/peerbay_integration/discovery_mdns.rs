@@ -13,18 +13,12 @@ fn mdns_roundtrips_advertisement() {
     };
     let service = MdnsService::new(config.clone()).unwrap();
 
-    let handle = thread::spawn(move || {
-        service.clone().browse(Duration::from_secs(2)).unwrap()
-    });
+    let handle = thread::spawn(move || service.clone().browse(Duration::from_secs(2)).unwrap());
 
     thread::sleep(Duration::from_millis(50));
     let sender = MdnsService::new(config.clone()).unwrap();
-    let advertisement = MdnsAdvertisement::new(
-        "peer-mdns-a".to_owned(),
-        "linux".to_owned(),
-        18080,
-    )
-    .unwrap();
+    let advertisement =
+        MdnsAdvertisement::new("peer-mdns-a".to_owned(), "linux".to_owned(), 18080).unwrap();
     sender.announce(&advertisement).unwrap();
 
     let (received, _) = handle.join().unwrap();
@@ -50,40 +44,32 @@ fn mdns_rejects_malformed_payload() {
 
     thread::sleep(Duration::from_millis(50));
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    socket.send_to(b"{not json}", format!("127.0.0.1:{}", port)).unwrap();
+    socket
+        .send_to(b"{not json}", format!("127.0.0.1:{}", port))
+        .unwrap();
     handle.join().unwrap();
 }
 
 #[test]
 fn mdns_rejects_bad_txt_key() {
-    let mut advertisement = MdnsAdvertisement::new(
-        "peer-mdns-b".to_owned(),
-        "linux".to_owned(),
-        18081,
-    )
-    .unwrap();
-    advertisement.text.insert("bad key".to_owned(), "value".to_owned());
+    let mut advertisement =
+        MdnsAdvertisement::new("peer-mdns-b".to_owned(), "linux".to_owned(), 18081).unwrap();
+    advertisement
+        .text
+        .insert("bad key".to_owned(), "value".to_owned());
     assert!(advertisement.validate().is_err());
 }
 
 #[test]
 fn mdns_rejects_unicode_metadata() {
-    let result = MdnsAdvertisement::new(
-        "peer-mdns".to_owned(),
-        "linux\u{202e}".to_owned(),
-        18082,
-    );
+    let result = MdnsAdvertisement::new("peer-mdns".to_owned(), "linux\u{202e}".to_owned(), 18082);
     assert!(result.is_err());
 }
 
 #[test]
 fn mdns_rejects_wrong_service_type() {
-    let mut advertisement = MdnsAdvertisement::new(
-        "peer-mdns".to_owned(),
-        "linux".to_owned(),
-        18083,
-    )
-    .unwrap();
+    let mut advertisement =
+        MdnsAdvertisement::new("peer-mdns".to_owned(), "linux".to_owned(), 18083).unwrap();
     advertisement.service_type = "_evil._tcp.local".to_owned();
     assert!(advertisement.validate().is_err());
 }
@@ -96,14 +82,12 @@ fn mdns_rejects_port_zero() {
 
 #[test]
 fn mdns_rejects_too_many_txt_entries() {
-    let mut advertisement = MdnsAdvertisement::new(
-        "peer-mdns".to_owned(),
-        "linux".to_owned(),
-        18084,
-    )
-    .unwrap();
+    let mut advertisement =
+        MdnsAdvertisement::new("peer-mdns".to_owned(), "linux".to_owned(), 18084).unwrap();
     for i in 0..65 {
-        advertisement.text.insert(format!("key{}", i), "value".to_owned());
+        advertisement
+            .text
+            .insert(format!("key{}", i), "value".to_owned());
     }
     assert!(advertisement.validate().is_err());
 }

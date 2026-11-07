@@ -1,6 +1,6 @@
 pub mod app;
-pub mod discovery;
 mod commands;
+pub mod discovery;
 mod events;
 mod features;
 pub mod identity;

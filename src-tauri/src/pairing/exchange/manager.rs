@@ -1,5 +1,5 @@
-use crate::pairing::PairingExchangeError;
 use super::*;
+use crate::pairing::PairingExchangeError;
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -52,7 +52,8 @@ impl PairingManager {
         versions: Vec<u16>,
         timeout: Duration,
     ) -> Result<PairingSession, PairingExchangeError> {
-        let exchange = PairingExchange::as_initiator(pairing_id, device_id, fingerprint, versions, timeout)?;
+        let exchange =
+            PairingExchange::as_initiator(pairing_id, device_id, fingerprint, versions, timeout)?;
         self.insert(exchange)
     }
 
@@ -60,7 +61,10 @@ impl PairingManager {
         &self,
         exchange: PairingExchange,
     ) -> Result<PairingSession, PairingExchangeError> {
-        let mut sessions = self.sessions.lock().expect("pairing manager mutex poisoned");
+        let mut sessions = self
+            .sessions
+            .lock()
+            .expect("pairing manager mutex poisoned");
         self.prune_expired(&mut sessions);
         if sessions.len() >= self.max_sessions {
             return Err(PairingExchangeError::TooManySessions);
@@ -74,18 +78,27 @@ impl PairingManager {
     }
 
     pub fn get(&self, pairing_id: &str) -> Option<PairingSession> {
-        let mut sessions = self.sessions.lock().expect("pairing manager mutex poisoned");
+        let mut sessions = self
+            .sessions
+            .lock()
+            .expect("pairing manager mutex poisoned");
         self.prune_expired(&mut sessions);
         sessions.get(pairing_id).cloned()
     }
 
     pub fn remove(&self, pairing_id: &str) -> bool {
-        let mut sessions = self.sessions.lock().expect("pairing manager mutex poisoned");
+        let mut sessions = self
+            .sessions
+            .lock()
+            .expect("pairing manager mutex poisoned");
         sessions.remove(pairing_id).is_some()
     }
 
     pub fn len(&self) -> usize {
-        let mut sessions = self.sessions.lock().expect("pairing manager mutex poisoned");
+        let mut sessions = self
+            .sessions
+            .lock()
+            .expect("pairing manager mutex poisoned");
         self.prune_expired(&mut sessions);
         sessions.len()
     }

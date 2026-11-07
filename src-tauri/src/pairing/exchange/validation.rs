@@ -32,8 +32,7 @@ pub(super) fn parse_pairing_id(value: &str) -> Result<(), PairingExchangeError> 
     }
     if value.chars().any(|character| {
         character.is_ascii_whitespace()
-            || !(character.is_ascii_alphanumeric()
-                || matches!(character, '.' | '_' | '-' | ':'))
+            || !(character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-' | ':'))
     }) {
         return Err(PairingExchangeError::InvalidPairingId);
     }
@@ -102,7 +101,10 @@ pub(super) fn validate_protocol_versions(versions: &[u16]) -> Result<(), Pairing
             return Err(PairingExchangeError::InvalidProtocolVersions);
         }
     }
-    if limits().validate_batch("protocol_versions", versions.len()).is_err() {
+    if limits()
+        .validate_batch("protocol_versions", versions.len())
+        .is_err()
+    {
         return Err(PairingExchangeError::InvalidProtocolVersions);
     }
 

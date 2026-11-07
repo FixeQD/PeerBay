@@ -1,16 +1,18 @@
-use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
-use super::crypto::*;
-use super::validation::*;
-use super::types::*;
 use super::PairingExchange;
+use super::crypto::*;
+use super::types::*;
+use super::validation::*;
+use crate::pairing::PairingExchangeError;
+use crate::protocol::pairing::{
+    PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart,
+};
 
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use zeroize::{Zeroize, Zeroizing};
 
 impl PairingExchange {
-pub fn reveal(&mut self) -> Result<ProtocolNonce, PairingExchangeError> {
+    pub fn reveal(&mut self) -> Result<ProtocolNonce, PairingExchangeError> {
         self.ensure_active()?;
         if !matches!(self.state, PairingExchangeState::Committed) {
             return Err(PairingExchangeError::StateMismatch {
@@ -26,7 +28,10 @@ pub fn reveal(&mut self) -> Result<ProtocolNonce, PairingExchangeError> {
 
     pub fn apply_reveal(&mut self, reveal: &PairingReveal) -> Result<(), PairingExchangeError> {
         self.ensure_active()?;
-        if !matches!(self.state, PairingExchangeState::Committed | PairingExchangeState::Revealing) {
+        if !matches!(
+            self.state,
+            PairingExchangeState::Committed | PairingExchangeState::Revealing
+        ) {
             return Err(PairingExchangeError::StateMismatch {
                 expected: "committed",
                 got: self.state.as_str(),

@@ -12,8 +12,8 @@ pub use manager::PairingManager;
 
 mod core;
 pub use core::*;
-mod init;
 mod commit;
+mod init;
 mod reveal;
 mod state;
 mod trust;

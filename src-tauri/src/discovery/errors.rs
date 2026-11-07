@@ -20,7 +20,10 @@ impl Display for DiscoveryError {
             Self::InvalidAddress => write!(formatter, "invalid discovery address"),
             Self::InvalidJson => write!(formatter, "invalid discovery json"),
             Self::InvalidSize { length, max } => {
-                write!(formatter, "discovery message is too large: {length}, limit {max}")
+                write!(
+                    formatter,
+                    "discovery message is too large: {length}, limit {max}"
+                )
             }
             Self::InvalidBeacon => write!(formatter, "invalid discovery beacon"),
             Self::ReceiveTimeout => write!(formatter, "discovery receive timed out"),

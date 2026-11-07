@@ -138,8 +138,12 @@ fn tls_open_rejects_non_loopback_peer_address() {
     let cert_a = TransportCertificate::generate_for_device(id_a).unwrap();
     let cert_b = TransportCertificate::generate_for_device(id_b).unwrap();
 
-    let client =
-        TlsTransport::with_certificate(endpoint(id_a, 19899), cert_a, Some(cert_b.certificate_der().to_vec())).unwrap();
+    let client = TlsTransport::with_certificate(
+        endpoint(id_a, 19899),
+        cert_a,
+        Some(cert_b.certificate_der().to_vec()),
+    )
+    .unwrap();
     let malicious = PeerEndpoint::new(id_b, "8.8.8.8:443", TransportKind::Loopback).unwrap();
 
     let result = client.open(&malicious, ChannelKind::Control);

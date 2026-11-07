@@ -44,7 +44,6 @@ fn initiator_and_responder_complete_nonce_exchange() {
 
     assert_eq!(initiator.state(), PairingExchangeState::Revealed);
     assert_eq!(responder.state(), PairingExchangeState::Revealed);
-
 }
 
 #[test]
@@ -67,7 +66,6 @@ fn commitment_mismatch_is_rejected() {
     )
     .unwrap();
 
-
     initiator.apply_commit(&commit).unwrap();
     let mut bad_reveal = initiator.reveal().unwrap();
     let mut tampered: String = bad_reveal.nonce.clone();
@@ -75,7 +73,10 @@ fn commitment_mismatch_is_rejected() {
     tampered.push(if last == 'a' { 'b' } else { 'a' });
     bad_reveal.nonce = tampered;
     let result = responder.apply_nonce(&bad_reveal);
-    assert!(matches!(result, Err(PairingExchangeError::CommitmentMismatch)));
+    assert!(matches!(
+        result,
+        Err(PairingExchangeError::CommitmentMismatch)
+    ));
 }
 
 #[test]
@@ -110,7 +111,10 @@ fn unsupported_protocol_version_is_rejected() {
         vec![1],
         Duration::from_secs(60),
     );
-    assert!(matches!(result, Err(PairingExchangeError::ProtocolVersionMismatch)));
+    assert!(matches!(
+        result,
+        Err(PairingExchangeError::ProtocolVersionMismatch)
+    ));
 }
 
 #[test]
@@ -149,7 +153,10 @@ fn manager_rejects_duplicate_sessions() {
         common_versions(),
         Duration::from_secs(60),
     );
-    assert!(matches!(duplicate, Err(PairingExchangeError::DuplicateSession)));
+    assert!(matches!(
+        duplicate,
+        Err(PairingExchangeError::DuplicateSession)
+    ));
     assert_eq!(manager.len(), 1);
     assert!(manager.get("pair-6").is_some());
     assert!(manager.remove("pair-6"));
@@ -165,5 +172,8 @@ fn invalid_identifier_is_rejected() {
         common_versions(),
         Duration::from_secs(60),
     );
-    assert!(matches!(result, Err(PairingExchangeError::InvalidPairingId)));
+    assert!(matches!(
+        result,
+        Err(PairingExchangeError::InvalidPairingId)
+    ));
 }

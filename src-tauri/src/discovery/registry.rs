@@ -154,10 +154,17 @@ impl DiscoveryRegistry {
                     continue;
                 };
                 // Drop only addresses that have gone stale preserving recently observed ones
-                peer.addresses
-                    .retain(|_, address| address.last_seen.checked_add(self.address_timeout).is_some_and(|deadline| now <= deadline));
+                peer.addresses.retain(|_, address| {
+                    address
+                        .last_seen
+                        .checked_add(self.address_timeout)
+                        .is_some_and(|deadline| now <= deadline)
+                });
 
-                let device_expired = peer.last_seen.checked_add(self.device_timeout).is_none_or(|deadline| now > deadline);
+                let device_expired = peer
+                    .last_seen
+                    .checked_add(self.device_timeout)
+                    .is_none_or(|deadline| now > deadline);
                 device_expired || peer.addresses.is_empty()
             };
             if expired {
@@ -185,7 +192,6 @@ impl DiscoveryRegistry {
     fn should_remove_empty_peer(&self) -> bool {
         true
     }
-
 }
 
 fn evict_oldest_address(peer: &mut DiscoveredPeer) {
@@ -236,4 +242,3 @@ fn is_disallowed_format_character(character: char) -> bool {
             | '\u{feff}'
     )
 }
-

@@ -1,9 +1,9 @@
+use super::PairingExchange;
+use super::crypto::*;
+use super::types::*;
+use super::validation::*;
 use crate::pairing::PairingExchangeError;
 use crate::protocol::pairing::{PairingCommit, PairingStart};
-use super::crypto::*;
-use super::validation::*;
-use super::types::*;
-use super::PairingExchange;
 
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
@@ -17,14 +17,14 @@ impl PairingExchange {
         local_versions: Vec<u16>,
         timeout: Duration,
     ) -> Result<Self, PairingExchangeError> {
-        Self::validate_inputs(&pairing_id, &local_device_id, &local_fingerprint, &local_versions)?;
-        let nonce = generate_nonce()?;
-        let commitment = hash_nonce(
-            &nonce,
+        Self::validate_inputs(
             &pairing_id,
+            &local_device_id,
             &local_fingerprint,
-            "initiator",
-        );
+            &local_versions,
+        )?;
+        let nonce = generate_nonce()?;
+        let commitment = hash_nonce(&nonce, &pairing_id, &local_fingerprint, "initiator");
         Ok(Self {
             pairing_id,
             role: PairingRole::Initiator,
@@ -57,7 +57,9 @@ impl PairingExchange {
         local_versions: Vec<u16>,
         timeout: Duration,
     ) -> Result<(Self, PairingCommit), PairingExchangeError> {
-        start.validate().map_err(|_| PairingExchangeError::InvalidPairingId)?;
+        start
+            .validate()
+            .map_err(|_| PairingExchangeError::InvalidPairingId)?;
         validate_device_id(&local_device_id)?;
         validate_fingerprint_hex(&local_fingerprint)?;
         validate_protocol_versions(&local_versions)?;
@@ -81,12 +83,7 @@ impl PairingExchange {
         }
 
         let nonce = generate_nonce()?;
-        let commitment = hash_nonce(
-            &nonce,
-            &start.pairing_id,
-            &local_fingerprint,
-            "responder",
-        );
+        let commitment = hash_nonce(&nonce, &start.pairing_id, &local_fingerprint, "responder");
         let exchange = Self {
             pairing_id: start.pairing_id.clone(),
             role: PairingRole::Responder,

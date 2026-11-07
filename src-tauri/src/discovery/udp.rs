@@ -35,7 +35,10 @@ impl DiscoveryBeacon {
             || self.platform != self.platform.trim()
             || self.platform.chars().any(char::is_control)
             || self.platform.chars().any(is_disallowed_format_character)
-            || self.platform.chars().any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
+            || self
+                .platform
+                .chars()
+                .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
             || self.platform.len() > 128
             || self.device_id.len() > 256
         {
@@ -76,17 +79,19 @@ impl DiscoveryService {
                 max: self.config.max_message_size,
             });
         }
-        let socket = UdpSocket::bind("0.0.0.0:0".to_string()).map_err(|_| DiscoveryError::BindFailed)?;
-        socket
-            .set_broadcast(true)
-            .map_err(|_| DiscoveryError::Io)?;
+        let socket =
+            UdpSocket::bind("0.0.0.0:0".to_string()).map_err(|_| DiscoveryError::BindFailed)?;
+        socket.set_broadcast(true).map_err(|_| DiscoveryError::Io)?;
         socket
             .send_to(&bytes, self.target())
             .map_err(|_| DiscoveryError::Io)?;
         Ok(())
     }
 
-    pub fn receive(&self, timeout: Duration) -> Result<(DiscoveryBeacon, SocketAddr), DiscoveryError> {
+    pub fn receive(
+        &self,
+        timeout: Duration,
+    ) -> Result<(DiscoveryBeacon, SocketAddr), DiscoveryError> {
         let socket = UdpSocket::bind(format!("{}:{}", self.config.bind_address, self.config.port))
             .map_err(|_| DiscoveryError::BindFailed)?;
         socket
@@ -108,8 +113,8 @@ impl DiscoveryService {
                 max: self.config.max_message_size,
             });
         }
-        let beacon: DiscoveryBeacon = serde_json::from_slice(&buffer[..size])
-            .map_err(|_| DiscoveryError::InvalidJson)?;
+        let beacon: DiscoveryBeacon =
+            serde_json::from_slice(&buffer[..size]).map_err(|_| DiscoveryError::InvalidJson)?;
         beacon.validate()?;
         Ok((beacon, source))
     }

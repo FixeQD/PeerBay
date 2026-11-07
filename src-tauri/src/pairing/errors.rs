@@ -9,7 +9,10 @@ pub enum PairingExchangeError {
     InvalidNonce,
     InvalidProtocolVersions,
     DuplicateSession,
-    StateMismatch { expected: &'static str, got: &'static str },
+    StateMismatch {
+        expected: &'static str,
+        got: &'static str,
+    },
     CommitmentMismatch,
     NonceRevealMismatch,
     ProtocolVersionMismatch,
@@ -37,7 +40,9 @@ impl Display for PairingExchangeError {
             Self::InvalidCertificateFingerprint => {
                 write!(formatter, "certificate fingerprint is invalid")
             }
-            Self::InvalidCommitment => write!(formatter, "commitment is not canonical lowercase hex"),
+            Self::InvalidCommitment => {
+                write!(formatter, "commitment is not canonical lowercase hex")
+            }
             Self::InvalidNonce => write!(formatter, "nonce is not canonical lowercase hex"),
             Self::InvalidProtocolVersions => write!(formatter, "protocol versions are invalid"),
             Self::DuplicateSession => write!(formatter, "pairing session already exists"),
@@ -46,7 +51,9 @@ impl Display for PairingExchangeError {
                 "pairing state mismatch: expected {expected}, got {got}"
             ),
             Self::CommitmentMismatch => write!(formatter, "nonce commitment verification failed"),
-            Self::NonceRevealMismatch => write!(formatter, "revealed nonce does not match commitment"),
+            Self::NonceRevealMismatch => {
+                write!(formatter, "revealed nonce does not match commitment")
+            }
             Self::ProtocolVersionMismatch => write!(formatter, "no common protocol version"),
             Self::Expired => write!(formatter, "pairing exchange expired"),
             Self::Cancelled => write!(formatter, "pairing exchange cancelled"),
@@ -58,10 +65,16 @@ impl Display for PairingExchangeError {
             Self::SasCodeMismatch => write!(formatter, "pairing SAS code does not match"),
             Self::UserDenied => write!(formatter, "pairing was denied by the user"),
             Self::InvalidSasCodeLifetime => {
-                write!(formatter, "pairing SAS code lifetime must be greater than zero")
+                write!(
+                    formatter,
+                    "pairing SAS code lifetime must be greater than zero"
+                )
             }
             Self::MissingPeerIdentity => {
-                write!(formatter, "peer identity is missing from the pairing exchange")
+                write!(
+                    formatter,
+                    "peer identity is missing from the pairing exchange"
+                )
             }
             Self::InvalidSessionToken => {
                 write!(formatter, "pairing session token is invalid")

@@ -1,16 +1,18 @@
-use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
-use super::crypto::*;
-use super::validation::*;
-use super::types::*;
 use super::PairingExchange;
+use super::crypto::*;
+use super::types::*;
+use super::validation::*;
+use crate::pairing::PairingExchangeError;
+use crate::protocol::pairing::{
+    PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart,
+};
 
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use zeroize::{Zeroize, Zeroizing};
 
 impl PairingExchange {
-pub fn start_message(&mut self) -> Result<PairingStart, PairingExchangeError> {
+    pub fn start_message(&mut self) -> Result<PairingStart, PairingExchangeError> {
         self.ensure_active()?;
         if self.role != PairingRole::Initiator {
             return Err(PairingExchangeError::StateMismatch {
@@ -63,7 +65,10 @@ pub fn start_message(&mut self) -> Result<PairingStart, PairingExchangeError> {
         Ok(())
     }
 
-    pub fn apply_start(&mut self, start: &PairingStart) -> Result<PairingCommit, PairingExchangeError> {
+    pub fn apply_start(
+        &mut self,
+        start: &PairingStart,
+    ) -> Result<PairingCommit, PairingExchangeError> {
         self.ensure_active()?;
         if self.role != PairingRole::Responder {
             return Err(PairingExchangeError::StateMismatch {
