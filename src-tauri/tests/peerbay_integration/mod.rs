@@ -25,6 +25,7 @@ mod protocol_roundtrip_vectors;
 mod protocol_sequence;
 mod redaction;
 mod security_logging;
+mod session_message_router;
 mod session_state_machine;
 mod storage;
 mod transport;
