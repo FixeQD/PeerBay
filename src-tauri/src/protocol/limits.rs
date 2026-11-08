@@ -121,6 +121,18 @@ impl ProtocolLimits {
     }
 
     pub fn validate_envelope<T>(self, envelope: &MessageEnvelope<T>) -> eros::Result<()> {
+        for (field, value) in [
+            ("id", envelope.id.as_str()),
+            ("t", envelope.message_type.as_str()),
+            ("sid", envelope.session_id.as_str()),
+        ] {
+            if value != value.trim() || value.chars().any(char::is_control) {
+                return Err(eros::error!(ProtocolLimitError::InvalidIdentifier {
+                    field
+                }));
+            }
+        }
+
         self.validate_string("id", &envelope.id)?;
         self.validate_string("t", envelope.message_type.as_str())?;
         self.validate_string("sid", &envelope.session_id)

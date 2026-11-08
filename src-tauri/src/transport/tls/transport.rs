@@ -83,7 +83,12 @@ impl TlsTransport {
             })
         })?;
 
-        if let Some(pinned) = peer_certificate_der.as_ref() {
+        let cert_der = CertificateDer::from(certificate.certificate_der().to_vec());
+        let key = rustls::pki_types::PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            certificate.private_key_der().to_vec(),
+        ));
+
+        let server_config = if let Some(pinned) = peer_certificate_der.as_ref() {
             let mut roots = rustls::RootCertStore::empty();
             roots
                 .add(CertificateDer::from(pinned.clone()))
@@ -92,19 +97,31 @@ impl TlsTransport {
                         detail: error.to_string()
                     })
                 })?;
-        }
-        let cert_der = CertificateDer::from(certificate.certificate_der().to_vec());
-        let key = rustls::pki_types::PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            certificate.private_key_der().to_vec(),
-        ));
-        let server_config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(vec![cert_der], key)
-            .map_err(|error| {
-                eros::error!(TlsTransportError::Tls {
-                    detail: error.to_string()
-                })
-            })?;
+            let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots))
+                .build()
+                .map_err(|error| {
+                    eros::error!(TlsTransportError::Tls {
+                        detail: error.to_string()
+                    })
+                })?;
+            ServerConfig::builder()
+                .with_client_cert_verifier(verifier)
+                .with_single_cert(vec![cert_der], key)
+                .map_err(|error| {
+                    eros::error!(TlsTransportError::Tls {
+                        detail: error.to_string()
+                    })
+                })?
+        } else {
+            ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(vec![cert_der], key)
+                .map_err(|error| {
+                    eros::error!(TlsTransportError::Tls {
+                        detail: error.to_string()
+                    })
+                })?
+        };
 
         Ok(Self {
             local,

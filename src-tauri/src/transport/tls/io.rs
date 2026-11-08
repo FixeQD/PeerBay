@@ -206,7 +206,7 @@ impl TlsTransport {
             if buffer_len >= total {
                 break;
             }
-            let needed = total - buffer_len;
+            let needed = (total - buffer_len).min(4096).max(1);
             let mut chunk = vec![0_u8; needed];
             let read_result = {
                 let mut state = self.state.lock().map_err(|_| {
@@ -342,9 +342,20 @@ impl Transport for TlsTransport {
                     detail: e.to_string()
                 })
             })?;
+        let client_cert = CertificateDer::from(self.certificate.certificate_der().to_vec());
+        let client_key = rustls::pki_types::PrivateKeyDer::Pkcs8(
+            rustls::pki_types::PrivatePkcs8KeyDer::from(
+                self.certificate.private_key_der().to_vec(),
+            ),
+        );
         let client_config = ClientConfig::builder()
             .with_webpki_verifier(verifier)
-            .with_no_client_auth();
+            .with_client_auth_cert(vec![client_cert], client_key)
+            .map_err(|error| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: error.to_string(),
+                })
+            })?;
         let conn = ClientConnection::new(Arc::new(client_config), server_name).map_err(|e| {
             eros::error!(TlsTransportError::Tls {
                 detail: e.to_string()
@@ -469,9 +480,20 @@ impl Transport for TlsTransport {
                     detail: e.to_string()
                 })
             })?;
+        let client_cert = CertificateDer::from(self.certificate.certificate_der().to_vec());
+        let client_key = rustls::pki_types::PrivateKeyDer::Pkcs8(
+            rustls::pki_types::PrivatePkcs8KeyDer::from(
+                self.certificate.private_key_der().to_vec(),
+            ),
+        );
         let client_config = ClientConfig::builder()
             .with_webpki_verifier(verifier)
-            .with_no_client_auth();
+            .with_client_auth_cert(vec![client_cert], client_key)
+            .map_err(|error| {
+                eros::error!(TlsTransportError::Tls {
+                    detail: error.to_string(),
+                })
+            })?;
         let conn = ClientConnection::new(Arc::new(client_config), server_name).map_err(|e| {
             eros::error!(TlsTransportError::Tls {
                 detail: e.to_string()

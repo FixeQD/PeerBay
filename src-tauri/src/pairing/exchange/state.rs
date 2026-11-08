@@ -85,7 +85,14 @@ impl PairingExchange {
         }
         code.validate()
             .map_err(|_| PairingExchangeError::InvalidSasCodeLifetime)?;
-        if now_ms() > code.expires_at_ms {
+        let now = now_ms();
+        if now > code.expires_at_ms {
+            return Err(PairingExchangeError::Expired);
+        }
+        let max_expiry = now
+            .saturating_add(u64::try_from(self.timeout.as_millis()).unwrap_or(u64::MAX))
+            .saturating_add(60_000);
+        if code.expires_at_ms > max_expiry {
             return Err(PairingExchangeError::Expired);
         }
         self.code_expires_at_ms = code.expires_at_ms;

@@ -23,6 +23,9 @@ impl DiscoveryBeacon {
     }
 
     pub fn validate(&self) -> Result<(), DiscoveryError> {
+        if self.port == 0 {
+            return Err(DiscoveryError::InvalidBeacon);
+        }
         if self.device_id.trim().is_empty() || self.device_id != self.device_id.trim() {
             return Err(DiscoveryError::InvalidBeacon);
         }
