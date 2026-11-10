@@ -28,6 +28,7 @@ mod redaction;
 mod security_logging;
 mod session_heartbeat;
 mod session_message_router;
+mod session_reconnect_backoff;
 mod session_state_machine;
 mod storage;
 mod transport;
