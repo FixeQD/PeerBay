@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zeroize::Zeroize;
 
 use super::limits::ProtocolLimits;
 
@@ -47,6 +48,12 @@ impl ResumeKey {
 impl Debug for ResumeKey {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("ResumeKey(<redacted>)")
+    }
+}
+
+impl Drop for ResumeKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
     }
 }
 

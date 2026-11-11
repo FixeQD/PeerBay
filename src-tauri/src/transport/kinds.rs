@@ -20,3 +20,17 @@ pub enum ChannelKind {
     Input,
     Fallback,
 }
+
+impl TransportKind {
+    /// Wire label for transport kind
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalNetwork => "local_network",
+            Self::UsbAdb => "usb_adb",
+            Self::BluetoothLe => "bluetooth_le",
+            Self::WifiDirect => "wifi_direct",
+            Self::PhoneHotspot => "phone_hotspot",
+            Self::Loopback => "loopback",
+        }
+    }
+}
