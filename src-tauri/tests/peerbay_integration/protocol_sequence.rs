@@ -612,3 +612,112 @@ fn a_valid_sequence_does_not_clear_other_channels_after_a_rejection() {
     assert_eq!(tracker.last_accepted(MessageChannel::Control), Some(10));
     assert_eq!(tracker.last_accepted(MessageChannel::Clipboard), Some(20));
 }
+
+#[test]
+fn restore_seeds_the_watermark_and_continues_accepting_next_sequences() {
+    let mut tracker = SequenceTracker::new("session-a").expect("tracker should be created");
+
+    tracker
+        .restore(MessageChannel::Control, 9)
+        .expect("a fresh tracker accepts any watermark");
+
+    assert_eq!(tracker.last_accepted(MessageChannel::Control), Some(9));
+
+    tracker
+        .accept(&control_message("session-a", 10, 100))
+        .expect("the next sequence should be accepted after a restore");
+
+    assert_eq!(tracker.last_accepted(MessageChannel::Control), Some(10));
+}
+
+#[test]
+fn restore_rejects_a_watermark_below_the_current_one() {
+    let mut tracker = SequenceTracker::new("session-a").expect("tracker should be created");
+    tracker
+        .accept(&control_message("session-a", 9, 100))
+        .expect("high-water mark should be accepted");
+
+    let error = tracker
+        .restore(MessageChannel::Control, 5)
+        .expect_err("a lower watermark would reopen a replay window")
+        .downcast_inner::<SequenceError>()
+        .expect("restore regression error should be preserved");
+
+    assert_eq!(
+        error,
+        SequenceError::RestoreRegression {
+            channel: MessageChannel::Control,
+            requested: 5,
+            current: 9,
+        }
+    );
+    assert_eq!(
+        tracker.last_accepted(MessageChannel::Control),
+        Some(9),
+        "a rejected restore must not change the watermark"
+    );
+}
+
+#[test]
+fn restore_is_idempotent_for_the_same_watermark() {
+    let mut tracker = SequenceTracker::new("session-a").expect("tracker should be created");
+
+    tracker
+        .restore(MessageChannel::Control, 9)
+        .expect("the first restore should set the watermark");
+    tracker
+        .restore(MessageChannel::Control, 9)
+        .expect("restoring the same watermark again must be allowed");
+
+    assert_eq!(tracker.last_accepted(MessageChannel::Control), Some(9));
+}
+
+#[test]
+fn restored_duplicate_and_replayed_sequences_are_rejected() {
+    let mut tracker = SequenceTracker::new("session-a").expect("tracker should be created");
+    tracker
+        .restore(MessageChannel::Control, 9)
+        .expect("watermark should be restored");
+
+    let duplicate = tracker
+        .accept(&control_message("session-a", 9, 100))
+        .expect_err("the restored watermark message must not be delivered twice")
+        .downcast_inner::<SequenceError>()
+        .expect("duplicate error should be preserved");
+    let replay = tracker
+        .accept(&control_message("session-a", 3, 100))
+        .expect_err("older sequences stay replays after a restore")
+        .downcast_inner::<SequenceError>()
+        .expect("replay error should be preserved");
+
+    assert_eq!(
+        duplicate,
+        SequenceError::Duplicate {
+            channel: MessageChannel::Control,
+            seq: 9,
+        }
+    );
+    assert_eq!(
+        replay,
+        SequenceError::Replay {
+            channel: MessageChannel::Control,
+            seq: 3,
+            last_accepted: 9,
+        }
+    );
+}
+
+#[test]
+fn restore_state_is_independent_between_channels() {
+    let mut tracker = SequenceTracker::new("session-a").expect("tracker should be created");
+
+    tracker
+        .accept(&control_message("session-a", 12, 1))
+        .expect("control sequence should be accepted");
+    tracker
+        .restore(MessageChannel::Clipboard, 7)
+        .expect("clipboard watermark should be restored independently");
+
+    assert_eq!(tracker.last_accepted(MessageChannel::Control), Some(12));
+    assert_eq!(tracker.last_accepted(MessageChannel::Clipboard), Some(7));
+}

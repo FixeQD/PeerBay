@@ -65,6 +65,21 @@ impl SequenceTracker {
         self.last_accepted.insert(channel, envelope.seq);
         Ok(())
     }
+
+    /// Restores the accepted-sequence watermark for a channel after a resume
+    pub fn restore(&mut self, channel: MessageChannel, last_accepted: u64) -> eros::Result<()> {
+        let current = self.last_accepted(channel);
+        if let Some(current) = current.filter(|current| last_accepted < *current) {
+            return Err(eros::error!(SequenceError::RestoreRegression {
+                channel,
+                requested: last_accepted,
+                current,
+            }));
+        }
+
+        self.last_accepted.insert(channel, last_accepted);
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -81,6 +96,11 @@ pub enum SequenceError {
         channel: MessageChannel,
         seq: u64,
         last_accepted: u64,
+    },
+    RestoreRegression {
+        channel: MessageChannel,
+        requested: u64,
+        current: u64,
     },
 }
 
@@ -104,6 +124,14 @@ impl Display for SequenceError {
             } => write!(
                 formatter,
                 "replayed protocol sequence {seq} on {channel:?}; last accepted is {last_accepted}"
+            ),
+            Self::RestoreRegression {
+                channel,
+                requested,
+                current,
+            } => write!(
+                formatter,
+                "restored sequence watermark {requested} for {channel:?} would regress below the accepted {current}"
             ),
         }
     }
