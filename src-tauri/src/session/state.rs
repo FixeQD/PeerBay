@@ -23,75 +23,69 @@ impl SessionState {
 
         matches!(
             (self, next),
-            (Self::Disconnected, Self::ResolvingPeer | Self::Closed)
-                | (
-                    Self::ResolvingPeer,
-                    Self::OpeningTransport | Self::Disconnected | Self::Released | Self::Closed
-                )
-                | (
-                    Self::OpeningTransport,
-                    Self::Authenticating
-                        | Self::ResolvingPeer
-                        | Self::Reconnecting
-                        | Self::Disconnected
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::Authenticating,
-                    Self::NegotiatingCapabilities
-                        | Self::OpeningTransport
-                        | Self::Reconnecting
-                        | Self::Disconnected
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::NegotiatingCapabilities,
-                    Self::Connected
-                        | Self::Degraded
-                        | Self::Reconnecting
-                        | Self::Disconnected
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::Connected,
-                    Self::MigratingTransport
-                        | Self::Degraded
-                        | Self::Reconnecting
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::MigratingTransport,
-                    Self::Connected
-                        | Self::Degraded
-                        | Self::Reconnecting
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::Degraded,
-                    Self::Connected
-                        | Self::MigratingTransport
-                        | Self::Reconnecting
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (
-                    Self::Reconnecting,
-                    Self::ResolvingPeer
-                        | Self::OpeningTransport
-                        | Self::Authenticating
-                        | Self::NegotiatingCapabilities
-                        | Self::Connected
-                        | Self::Degraded
-                        | Self::Disconnected
-                        | Self::Released
-                        | Self::Closed
-                )
-                | (Self::Released, Self::Closed)
+            (
+                Self::Disconnected,
+                Self::ResolvingPeer | Self::Released | Self::Closed
+            ) | (
+                Self::ResolvingPeer,
+                Self::OpeningTransport | Self::Disconnected | Self::Released | Self::Closed
+            ) | (
+                Self::OpeningTransport,
+                Self::Authenticating
+                    | Self::ResolvingPeer
+                    | Self::Reconnecting
+                    | Self::Disconnected
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::Authenticating,
+                Self::NegotiatingCapabilities
+                    | Self::OpeningTransport
+                    | Self::Reconnecting
+                    | Self::Disconnected
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::NegotiatingCapabilities,
+                Self::Connected
+                    | Self::Degraded
+                    | Self::Reconnecting
+                    | Self::Disconnected
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::Connected,
+                Self::MigratingTransport
+                    | Self::Degraded
+                    | Self::Reconnecting
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::MigratingTransport,
+                Self::Connected
+                    | Self::Degraded
+                    | Self::Reconnecting
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::Degraded,
+                Self::Connected
+                    | Self::MigratingTransport
+                    | Self::Reconnecting
+                    | Self::Released
+                    | Self::Closed
+            ) | (
+                Self::Reconnecting,
+                Self::ResolvingPeer
+                    | Self::OpeningTransport
+                    | Self::Authenticating
+                    | Self::NegotiatingCapabilities
+                    | Self::Connected
+                    | Self::Degraded
+                    | Self::Disconnected
+                    | Self::Released
+                    | Self::Closed
+            ) | (Self::Released, Self::Closed)
         )
     }
 
