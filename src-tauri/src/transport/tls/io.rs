@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, ServerConnection, StreamOwned};
+use zeroize::Zeroizing;
 
 use super::{errors::TlsTransportError, state::TlsStream, transport::TlsTransport};
 use crate::transport::{
@@ -387,6 +388,14 @@ impl Transport for TlsTransport {
         state.read_buffers.remove(channel.id());
         state.peer_endpoints.remove(channel.id());
         Ok(())
+    }
+
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        TlsTransport::send(self, channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        Ok(TlsTransport::receive(self, channel)?.map(Zeroizing::new))
     }
 
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {

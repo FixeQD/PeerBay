@@ -8,6 +8,7 @@ use super::state::InvalidSessionTransition;
 pub enum SessionError {
     InvalidTransition(InvalidSessionTransition),
     Closed,
+    ChannelNotAttached,
     HandlerAlreadyRegistered {
         domain: MessageChannel,
     },
@@ -25,6 +26,9 @@ impl Display for SessionError {
         match self {
             Self::InvalidTransition(error) => write!(formatter, "{error}"),
             Self::Closed => write!(formatter, "session is closed"),
+            Self::ChannelNotAttached => {
+                write!(formatter, "session has no attached transport channel")
+            }
             Self::HandlerAlreadyRegistered { domain } => {
                 write!(
                     formatter,

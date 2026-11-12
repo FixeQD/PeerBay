@@ -2,6 +2,7 @@
 
 pub mod errors;
 pub mod heartbeat;
+pub mod manager;
 pub mod migration;
 pub mod reconnect;
 pub mod release;
@@ -10,6 +11,7 @@ pub mod state;
 
 pub use errors::SessionError;
 pub use heartbeat::{Heartbeat, HeartbeatConfig, LivenessStatus, RttSample};
+pub use manager::PeerSession;
 pub use migration::{
     ChannelSeqSnapshot, MigrationConfig, MigrationConfigError, MigrationError, MigrationFailure,
     MigrationPhase, MigrationPlan, MigrationRouteState, MigrationTeardownSummary,

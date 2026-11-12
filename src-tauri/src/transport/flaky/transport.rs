@@ -1,4 +1,6 @@
 use super::FlakyConfig;
+use zeroize::Zeroizing;
+
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
 };
@@ -29,6 +31,14 @@ impl<T: Transport + Clone> Transport for FlakyTransport<T> {
 
     fn close(&self, channel: &TransportChannel) -> eros::Result<()> {
         self.inner.close(channel)
+    }
+
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        self.inner.send(channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        self.inner.receive(channel)
     }
 
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {

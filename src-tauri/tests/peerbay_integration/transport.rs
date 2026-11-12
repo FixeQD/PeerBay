@@ -3,6 +3,7 @@ use peerbay_lib::transport::{
     TransportMetrics,
 };
 use serde_json::json;
+use zeroize::Zeroizing;
 
 fn transport_error(result: eros::Result<()>) -> TransportError {
     result
@@ -160,6 +161,14 @@ impl Transport for PortProbe {
 
     fn close(&self, _channel: &TransportChannel) -> eros::Result<()> {
         Ok(())
+    }
+
+    fn send(&self, _channel: &TransportChannel, _payload: Vec<u8>) -> eros::Result<()> {
+        Ok(())
+    }
+
+    fn receive(&self, _channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        Ok(None)
     }
 
     fn metrics(&self, _channel: &TransportChannel) -> eros::Result<TransportMetrics> {

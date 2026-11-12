@@ -30,6 +30,7 @@ mod session_channel_ledger;
 mod session_heartbeat;
 mod session_message_router;
 mod session_migration_abandon;
+mod session_peer_session;
 mod session_reconnect_backoff;
 mod session_reconnect_idempotency;
 mod session_release_routing;

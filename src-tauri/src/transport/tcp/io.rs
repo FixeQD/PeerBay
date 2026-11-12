@@ -2,6 +2,8 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
+use zeroize::Zeroizing;
+
 use super::{errors::TcpTransportError, transport::TcpTransport};
 use crate::transport::{
     ChannelKind, PeerEndpoint, Transport, TransportChannel, TransportKind, TransportMetrics,
@@ -376,6 +378,14 @@ impl Transport for TcpTransport {
         state.read_buffers.remove(channel.id());
         state.peer_endpoints.remove(channel.id());
         Ok(())
+    }
+
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        TcpTransport::send(self, channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        Ok(TcpTransport::receive(self, channel)?.map(Zeroizing::new))
     }
 
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {

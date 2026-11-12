@@ -13,6 +13,7 @@ use peerbay_lib::transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport, TransportChannel, TransportKind,
     TransportMetrics,
 };
+use zeroize::Zeroizing;
 
 const SESSION_ID: &str = "session-resource-release-0001";
 const NOW_MS: u64 = 1_000_000;
@@ -60,6 +61,14 @@ impl Transport for FailingCloseTransport {
             return Err(eros::error!(FixtureError::ForcedCloseFailure));
         }
         self.inner.close(channel)
+    }
+
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        self.inner.send(channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        self.inner.receive(channel)
     }
 
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {

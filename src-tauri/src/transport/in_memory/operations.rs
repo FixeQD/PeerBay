@@ -137,6 +137,14 @@ impl Transport for InMemoryTransport {
         Ok(())
     }
 
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        InMemoryTransport::send(self, channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        InMemoryTransport::receive(self, channel)
+    }
+
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {
         let state = self.network.lock()?;
         let link = state.link_for(channel, &self.local.device_id)?;

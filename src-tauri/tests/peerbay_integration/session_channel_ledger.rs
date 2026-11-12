@@ -8,6 +8,7 @@ use peerbay_lib::transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport, TransportChannel, TransportKind,
     TransportMetrics,
 };
+use zeroize::Zeroizing;
 
 fn endpoint(id: &str) -> PeerEndpoint {
     PeerEndpoint::new(id, "127.0.0.1:9", TransportKind::Loopback)
@@ -66,6 +67,14 @@ impl Transport for FailingCloseTransport {
             return Err(eros::error!(FixtureError::ForcedCloseFailure));
         }
         self.inner.close(channel)
+    }
+
+    fn send(&self, channel: &TransportChannel, payload: Vec<u8>) -> eros::Result<()> {
+        self.inner.send(channel, payload)
+    }
+
+    fn receive(&self, channel: &TransportChannel) -> eros::Result<Option<Zeroizing<Vec<u8>>>> {
+        self.inner.receive(channel)
     }
 
     fn metrics(&self, channel: &TransportChannel) -> eros::Result<TransportMetrics> {
