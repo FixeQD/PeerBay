@@ -11,8 +11,9 @@ pub use errors::SessionError;
 pub use heartbeat::{Heartbeat, HeartbeatConfig, LivenessStatus, RttSample};
 pub use migration::{
     ChannelSeqSnapshot, MigrationConfig, MigrationConfigError, MigrationError, MigrationFailure,
-    MigrationPhase, MigrationPlan, MigrationRouteState, ResumeAcceptOutcome, ResumeKeyStore,
-    SessionResumeOutcome, TransportMigrationInitiator, TransportMigrationResponder,
+    MigrationPhase, MigrationPlan, MigrationRouteState, MigrationTeardownSummary,
+    ResumeAcceptOutcome, ResumeKeyStore, SessionResumeOutcome, TransportMigrationInitiator,
+    TransportMigrationResponder,
 };
 pub use reconnect::{
     ReconnectBackoff, ReconnectBackoffConfig, ReconnectConfigError, ReconnectDecision,

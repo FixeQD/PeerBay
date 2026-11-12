@@ -10,7 +10,8 @@ use crate::transport::{ChannelKind, Transport, TransportChannel};
 
 use super::keys::ResumeKeyStore;
 use super::{
-    MigrationConfig, MigrationError, MigrationRouteState, require_cursor, transition_state,
+    MigrationConfig, MigrationError, MigrationRouteState, MigrationTeardownSummary, require_cursor,
+    transition_state,
 };
 use crate::session::state::SessionState;
 
@@ -276,6 +277,27 @@ impl TransportMigrationResponder {
             self.session_state = transition_state(self.session_state, self.baseline_state)
                 .unwrap_or(self.session_state);
         }
+    }
+
+    /// Releases every resource this responder holds
+    pub fn teardown(&mut self) -> MigrationTeardownSummary {
+        let mut summary = MigrationTeardownSummary::default();
+        if !self.fallback_closed {
+            if let (Some(transport), Some(old_channel)) =
+                (self.old_transport.as_ref(), self.old_channel.as_ref())
+            {
+                match transport.close(old_channel) {
+                    Ok(()) => summary.closed += 1,
+                    Err(_) => summary.failed += 1,
+                }
+            }
+            self.fallback_closed = true;
+        }
+
+        self.accepted = None;
+        self.quarantined.clear();
+        self.keys.clear();
+        summary
     }
 
     fn reject(&mut self, reason: ResumeRejectionReason) -> SessionResumeOutcome {

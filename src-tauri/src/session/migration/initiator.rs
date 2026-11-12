@@ -11,7 +11,7 @@ use crate::session::state::SessionState;
 
 use super::{
     MigrationConfig, MigrationError, MigrationFailure, MigrationPhase, MigrationRouteState,
-    cursors_cover, require_cursor, transition_state,
+    MigrationTeardownSummary, cursors_cover, require_cursor, transition_state,
 };
 
 pub struct MigrationPlan {
@@ -207,7 +207,10 @@ impl TransportMigrationInitiator {
             plan.old_channel.transport().as_str(),
             new_channel.transport().as_str(),
         )
-        .map_err(|error| error.context("build channel migration"))?;
+        .map_err(|error| {
+            let _ = plan.old_transport.close(&new_channel);
+            error.context("build channel migration")
+        })?;
         let request = SessionResumeRequest::new(
             self.session_id.as_str(),
             key,
@@ -216,7 +219,10 @@ impl TransportMigrationInitiator {
             now_ms,
             now_ms.saturating_add(self.config.handshake_timeout_ms()),
         )
-        .map_err(|error| error.context("build session resume request"))?;
+        .map_err(|error| {
+            let _ = plan.old_transport.close(&new_channel);
+            error.context("build session resume request")
+        })?;
         let cursors = request.cursors.clone();
 
         self.session_state =
@@ -362,6 +368,50 @@ impl TransportMigrationInitiator {
             self.phase = MigrationPhase::Completed;
             self.fallback_until_ms = None;
         }
+    }
+
+    /// Closes every channel this initiator still holds
+    pub fn abandon(&mut self) -> MigrationTeardownSummary {
+        let mut summary = MigrationTeardownSummary::default();
+        if self.phase == MigrationPhase::Idle {
+            return summary;
+        }
+
+        if let (Some(transport), Some(new_channel)) =
+            (self.old_transport.as_ref(), self.new_channel.as_ref())
+        {
+            match transport.close(new_channel) {
+                Ok(()) => summary.closed += 1,
+                Err(_) => summary.failed += 1,
+            }
+        }
+        self.new_channel = None;
+
+        if !self.old_closed
+            && !self.old_channel_lost
+            && let (Some(transport), Some(old_channel)) =
+                (self.old_transport.as_ref(), self.old_channel.as_ref())
+        {
+            match transport.close(old_channel) {
+                Ok(()) => {
+                    summary.closed += 1;
+                    self.old_closed = true;
+                }
+                Err(_) => summary.failed += 1,
+            }
+        }
+
+        self.request = None;
+        self.cursors = Vec::new();
+        self.migration = None;
+        self.fallback_until_ms = None;
+        if matches!(
+            self.phase,
+            MigrationPhase::AwaitingAccept | MigrationPhase::Resumed
+        ) {
+            self.phase = MigrationPhase::Failed(MigrationFailure::SessionReleased);
+        }
+        summary
     }
 
     pub fn reset(&mut self) -> eros::Result<()> {

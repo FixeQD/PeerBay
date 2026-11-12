@@ -119,6 +119,13 @@ impl std::error::Error for MigrationConfigError {}
 pub enum MigrationFailure {
     HandshakeTimeout,
     RejectedByPeer { reason: ResumeRejectionReason },
+    SessionReleased,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MigrationTeardownSummary {
+    pub closed: usize,
+    pub failed: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
