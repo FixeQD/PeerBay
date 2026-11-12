@@ -21,7 +21,7 @@ pub use reconnect::{
 };
 pub use release::{
     ALL_TRIGGERS, ChannelReleaseSummary, DisconnectTrigger, MAX_TRACKED_CHANNELS, ReleaseError,
-    SessionChannelLedger,
+    SessionChannelLedger, SessionReleaseReport, SessionResources,
 };
 pub use router::{RouteDisposition, RoutedMessage, SessionMessageHandler, SessionRouter};
 pub use state::{InvalidSessionTransition, SessionState};

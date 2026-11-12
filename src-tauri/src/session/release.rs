@@ -3,7 +3,11 @@ use std::sync::Arc;
 
 use crate::transport::{Transport, TransportChannel};
 
-use super::state::SessionState;
+use super::errors::SessionError;
+use super::heartbeat::Heartbeat;
+use super::reconnect::ReconnectBackoff;
+use super::state::{InvalidSessionTransition, SessionState};
+use super::{TransportMigrationInitiator, TransportMigrationResponder};
 
 pub const MAX_TRACKED_CHANNELS: usize = 32;
 
@@ -218,5 +222,97 @@ impl DisconnectTrigger {
             return Ok(SessionState::Reconnecting);
         }
         Ok(SessionState::Disconnected)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct SessionResources {
+    pub channels: SessionChannelLedger,
+    pub initiator: Option<TransportMigrationInitiator>,
+    pub responder: Option<TransportMigrationResponder>,
+    pub heartbeat: Option<Heartbeat>,
+    pub backoff: Option<ReconnectBackoff>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionReleaseReport {
+    pub trigger: DisconnectTrigger,
+    pub from_state: SessionState,
+    pub to_state: SessionState,
+    pub channels_closed: usize,
+    pub channels_failed: usize,
+    pub channels_already_closed: usize,
+    pub migration_channels_closed: usize,
+    pub migration_channels_failed: usize,
+    pub secrets_cleared: bool,
+    pub workers_stopped: usize,
+    pub already_released: bool,
+}
+
+impl SessionResources {
+    pub fn release(
+        &mut self,
+        trigger: DisconnectTrigger,
+        state: &mut SessionState,
+    ) -> eros::Result<SessionReleaseReport> {
+        let from_state = *state;
+        let mut report = SessionReleaseReport {
+            trigger,
+            from_state,
+            to_state: from_state,
+            channels_closed: 0,
+            channels_failed: 0,
+            channels_already_closed: 0,
+            migration_channels_closed: 0,
+            migration_channels_failed: 0,
+            secrets_cleared: false,
+            workers_stopped: 0,
+            already_released: true,
+        };
+
+        if from_state == SessionState::Closed {
+            return Ok(report);
+        }
+        report.already_released = false;
+
+        if let Some(mut initiator) = self.initiator.take() {
+            let summary = initiator.abandon();
+            report.migration_channels_closed += summary.closed;
+            report.migration_channels_failed += summary.failed;
+        }
+
+        if let Some(mut responder) = self.responder.take() {
+            let summary = responder.teardown();
+            report.migration_channels_closed += summary.closed;
+            report.migration_channels_failed += summary.failed;
+            report.secrets_cleared = true;
+        }
+
+        let channel_summary = self.channels.close_all();
+        report.channels_closed = channel_summary.closed;
+        report.channels_failed = channel_summary.failed;
+        report.channels_already_closed = channel_summary.already_closed;
+        self.channels.drain();
+
+        report.workers_stopped += usize::from(self.heartbeat.take().is_some());
+        report.workers_stopped += usize::from(self.backoff.take().is_some());
+
+        let to_state = trigger.release_state(from_state)?;
+        report.to_state = to_state;
+        report.already_released = from_state == to_state;
+        if to_state != from_state {
+            if !from_state.can_transition(to_state) {
+                return Err(eros::error!(SessionError::InvalidTransition(
+                    InvalidSessionTransition {
+                        from: from_state,
+                        to: to_state,
+                    }
+                ))
+                .context("release trigger routes session to an unreachable state"));
+            }
+            *state = to_state;
+        }
+
+        Ok(report)
     }
 }

@@ -33,6 +33,7 @@ mod session_migration_abandon;
 mod session_reconnect_backoff;
 mod session_reconnect_idempotency;
 mod session_release_routing;
+mod session_resource_release;
 mod session_state_machine;
 mod session_transport_migration;
 mod storage;
