@@ -27,6 +27,7 @@ mod protocol_sequence;
 mod redaction;
 mod security_logging;
 mod session_channel_ledger;
+mod session_end_to_end;
 mod session_heartbeat;
 mod session_message_router;
 mod session_migration_abandon;
