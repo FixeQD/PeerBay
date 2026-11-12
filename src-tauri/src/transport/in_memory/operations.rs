@@ -105,6 +105,7 @@ impl InMemoryTransport {
             self.config,
         );
         state.links.insert(id.clone(), link);
+        state.purge_closed_links_over_cap();
         TransportChannel::new(id, transport, channel)
     }
 }

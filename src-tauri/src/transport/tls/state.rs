@@ -1,10 +1,39 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, VecDeque};
 use std::net::TcpStream;
 
 use rustls::{ClientConnection, ServerConnection, StreamOwned};
 
 use crate::transport::PeerEndpoint;
 use crate::transport::TransportChannel;
+
+pub(crate) const MAX_CLOSED_CHANNEL_IDS: usize = 4096;
+
+#[derive(Debug)]
+pub(crate) struct ClosedChannelIds {
+    entries: VecDeque<String>,
+}
+
+impl ClosedChannelIds {
+    pub(crate) fn new() -> Self {
+        Self {
+            entries: VecDeque::new(),
+        }
+    }
+
+    pub(crate) fn insert(&mut self, id: String) {
+        if self.contains(&id) {
+            return;
+        }
+        if self.entries.len() >= MAX_CLOSED_CHANNEL_IDS {
+            self.entries.pop_front();
+        }
+        self.entries.push_back(id);
+    }
+
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.entries.iter().any(|entry| entry == id)
+    }
+}
 
 #[derive(Debug)]
 pub(crate) enum TlsStream {
@@ -50,7 +79,7 @@ impl std::io::Write for TlsStream {
 pub(crate) struct TlsTransportState {
     pub(crate) next_id: u64,
     pub(crate) connections: BTreeMap<String, TlsStream>,
-    pub(crate) closed: BTreeSet<String>,
+    pub(crate) closed: ClosedChannelIds,
     pub(crate) peer_endpoints: BTreeMap<String, PeerEndpoint>,
     pub(crate) read_buffers: BTreeMap<String, Vec<u8>>,
 }
@@ -60,7 +89,7 @@ impl TlsTransportState {
         Self {
             next_id: 1,
             connections: BTreeMap::new(),
-            closed: BTreeSet::new(),
+            closed: ClosedChannelIds::new(),
             peer_endpoints: BTreeMap::new(),
             read_buffers: BTreeMap::new(),
         }

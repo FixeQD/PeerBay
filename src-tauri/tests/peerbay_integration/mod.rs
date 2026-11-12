@@ -38,6 +38,7 @@ mod session_state_machine;
 mod session_transport_migration;
 mod storage;
 mod transport;
+mod transport_closed_bookkeeping;
 mod transport_flaky;
 mod transport_in_memory;
 mod transport_tcp;

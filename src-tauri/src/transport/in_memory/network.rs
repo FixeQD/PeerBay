@@ -27,6 +27,8 @@ pub(super) struct NetworkState {
     next_channel: u64,
 }
 
+pub(super) const MAX_TRACKED_LINKS: usize = 4096;
+
 impl Default for NetworkState {
     fn default() -> Self {
         Self {
@@ -42,6 +44,23 @@ impl NetworkState {
         let id = format!("memory-channel-{:016}", self.next_channel);
         self.next_channel = self.next_channel.saturating_add(1);
         id
+    }
+
+    pub(super) fn purge_closed_links_over_cap(&mut self) {
+        if self.links.len() <= MAX_TRACKED_LINKS {
+            return;
+        }
+        let evict = self.links.len() - MAX_TRACKED_LINKS;
+        let oldest_closed: Vec<String> = self
+            .links
+            .iter()
+            .filter(|(_, link)| link.closed)
+            .map(|(id, _)| id.clone())
+            .take(evict)
+            .collect();
+        for id in oldest_closed {
+            self.links.remove(&id);
+        }
     }
 
     pub(super) fn link_for(
