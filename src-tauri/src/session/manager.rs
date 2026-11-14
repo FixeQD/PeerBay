@@ -7,8 +7,8 @@ use serde::de::DeserializeOwned;
 use zeroize::Zeroizing;
 
 use crate::protocol::{
-    ControlMessageType, MessageEnvelope, MessageType, PingBody, PongBody, ProtocolLimits,
-    SequenceTracker,
+    ControlMessageType, MessageChannel, MessageEnvelope, MessageType, PingBody, PongBody,
+    ProtocolLimits, SequenceTracker,
 };
 use crate::transport::{Transport, TransportChannel};
 
@@ -165,6 +165,30 @@ impl PeerSession {
         self.transport = None;
         self.channel = None;
         Ok(report)
+    }
+
+    pub fn adopt_primary(
+        &mut self,
+        transport: Arc<dyn Transport>,
+        channel: TransportChannel,
+    ) -> eros::Result<()> {
+        if self.state == SessionState::Closed {
+            return Err(eros::error!(SessionError::Closed).context("adopt primary session channel"));
+        }
+        self.resources
+            .channels
+            .track(transport.clone(), channel.clone())?;
+        self.transport = Some(transport);
+        self.channel = Some(channel);
+        Ok(())
+    }
+
+    pub fn last_sent_seq(&self) -> Option<u64> {
+        self.next_seq.checked_sub(1)
+    }
+
+    pub fn last_received_seq(&self, channel: MessageChannel) -> Option<u64> {
+        self.tracker.last_accepted(channel)
     }
 
     fn send_with_id<T: Serialize>(

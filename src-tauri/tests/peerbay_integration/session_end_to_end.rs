@@ -7,10 +7,15 @@ use peerbay_lib::identity::TransportCertificate;
 use peerbay_lib::pairing::{PairingExchange, PairingExchangeState, PairingManager};
 use peerbay_lib::protocol::pairing::{PairingAccepted, PairingConfirm};
 use peerbay_lib::protocol::{
-    ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION, PingBody, PongBody,
-    SequenceError,
+    ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope, MessageType,
+    PROTOCOL_VERSION, PingBody, PongBody, ResumeKey, ResumeRejectionReason, SequenceError,
+    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
 };
-use peerbay_lib::session::{LivenessStatus, PeerSession, SessionState};
+use peerbay_lib::session::{
+    ChannelSeqSnapshot, DisconnectTrigger, LivenessStatus, MigrationConfig, MigrationPlan,
+    PeerSession, ReconnectBackoff, ReconnectBackoffConfig, ReconnectDecision, ResumeKeyStore,
+    SessionResumeOutcome, SessionState, TransportMigrationInitiator, TransportMigrationResponder,
+};
 use peerbay_lib::storage::PeerTrustStore;
 use peerbay_lib::transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportChannel, TransportKind,
@@ -21,6 +26,7 @@ const DEVICE_B: &str = "123e4567-e89b-12d3-a456-426614174001";
 const PLATFORM: &str = "linux";
 const DISPLAY_NAME: &str = "PeerBay Linux";
 const SESSION_ID: &str = "session-local-peer-0001";
+const RECONNECTED_SESSION_ID: &str = "session-local-peer-0002";
 const PAIRING_ID: &str = "pair-local-peer-0001";
 const FOREIGN_SESSION_ID: &str = "session-foreign-0001";
 const NOW_MS: u64 = 1_000_000;
@@ -30,6 +36,7 @@ struct LocalPeer {
     certificate: TransportCertificate,
     transport: Option<Arc<InMemoryTransport>>,
     control_channel: Option<TransportChannel>,
+    remote_control_channel: Option<TransportChannel>,
     remote_endpoint: PeerEndpoint,
     registry: DiscoveryRegistry,
     pairing: PairingManager,
@@ -51,6 +58,7 @@ impl LocalPeer {
             certificate,
             transport: None,
             control_channel: None,
+            remote_control_channel: None,
             remote_endpoint: PeerEndpoint::new(device_id, "127.0.0.1:9", TransportKind::Loopback)
                 .expect("fixture endpoint"),
             registry: DiscoveryRegistry::new(Duration::from_secs(60), Duration::from_secs(30)),
@@ -82,29 +90,57 @@ impl LocalPeer {
         self.session.as_mut().expect("session attached")
     }
 
+    fn control_channel(&self) -> &TransportChannel {
+        self.control_channel
+            .as_ref()
+            .expect("control channel attached")
+    }
+
+    fn remote_control_channel(&self) -> &TransportChannel {
+        self.remote_control_channel
+            .as_ref()
+            .expect("peer control channel attached")
+    }
+
+    fn install_backoff(&mut self, config: ReconnectBackoffConfig) {
+        self.session_mut().resources_mut().backoff =
+            Some(ReconnectBackoff::try_new(config).expect("backoff config is valid"));
+    }
+
     fn open_control(&mut self, other: &mut LocalPeer) {
+        self.attach_control(other, SESSION_ID);
+    }
+
+    fn attach_control(&mut self, other: &mut LocalPeer, session_id: &str) {
         let now = Instant::now();
         let channel = self
             .transport()
             .open(&self.remote_endpoint, ChannelKind::Control)
             .expect("control channel opens");
-        let remote_channel = other
-            .transport()
-            .accept()
-            .expect("accept polls")
-            .expect("peer accepted the control channel");
+        let expected_id = channel.id().to_owned();
+        let remote_channel = loop {
+            let accepted = other
+                .transport()
+                .accept()
+                .expect("accept polls")
+                .expect("peer accepts the control channel");
+            if accepted.id() == expected_id {
+                break accepted;
+            }
+        };
 
-        let mut session = PeerSession::new(SESSION_ID, now).expect("session creates");
+        let mut session = PeerSession::new(session_id, now).expect("session creates");
         session
             .open_channel(self.transport().clone(), channel.clone())
             .expect("session attaches");
         self.control_channel = Some(channel);
         self.session = Some(session);
 
-        let mut peer_session = PeerSession::new(SESSION_ID, now).expect("peer session creates");
+        let mut peer_session = PeerSession::new(session_id, now).expect("peer session creates");
         peer_session
-            .open_channel(other.transport().clone(), remote_channel)
+            .open_channel(other.transport().clone(), remote_channel.clone())
             .expect("peer session attaches");
+        other.remote_control_channel = Some(remote_channel);
         other.session = Some(peer_session);
     }
 
@@ -272,6 +308,41 @@ impl LocalPeer {
             .expect("heartbeat worker")
             .check(now)
     }
+
+    fn send_resume_request(&mut self, request: SessionResumeRequest) {
+        self.session_mut()
+            .send_envelope(
+                MessageType::Control(ControlMessageType::SessionResume),
+                request,
+                NOW_MS + 5,
+            )
+            .expect("resume request sends");
+    }
+
+    fn expect_resume_request(&mut self) -> MessageEnvelope<SessionResumeRequest> {
+        self.session_mut()
+            .receive_envelope::<SessionResumeRequest>()
+            .expect("resume request receives")
+            .expect("resume request payload")
+    }
+
+    fn send_resume_accepted(&mut self, accepted: SessionResumeAccepted) {
+        self.session_mut()
+            .send_envelope(
+                MessageType::Control(ControlMessageType::SessionResume),
+                accepted,
+                NOW_MS + 12,
+            )
+            .expect("resume accepted sends");
+    }
+
+    fn expect_resume_accepted(&mut self) -> SessionResumeAccepted {
+        self.session_mut()
+            .receive_envelope::<SessionResumeAccepted>()
+            .expect("resume accepted receives")
+            .expect("resume accepted payload")
+            .body
+    }
 }
 
 fn local_peer_pair() -> (LocalPeer, LocalPeer) {
@@ -300,6 +371,61 @@ fn local_peer_pair() -> (LocalPeer, LocalPeer) {
     );
 
     (peer_a, peer_b)
+}
+
+fn session_key(hex_pairs: &str) -> ResumeKey {
+    ResumeKey::new(hex_pairs.repeat(32)).expect("fixture resume key is valid")
+}
+
+fn initiator_config() -> MigrationConfig {
+    MigrationConfig::new(Duration::from_millis(200), Duration::from_millis(60))
+}
+
+fn responder_config() -> MigrationConfig {
+    MigrationConfig::new(Duration::from_millis(200), Duration::from_millis(100))
+}
+
+fn backoff_config(max_attempts: u32) -> ReconnectBackoffConfig {
+    ReconnectBackoffConfig::new(
+        Duration::from_millis(50),
+        2,
+        Duration::from_secs(10),
+        max_attempts,
+    )
+}
+
+fn control_cursor(last_sent_seq: u64, last_received_seq: u64) -> ChannelResumeCursor {
+    ChannelResumeCursor::new(SessionChannel::Control, last_sent_seq, last_received_seq)
+}
+
+fn control_snapshot(last_sent_seq: u64, last_received_seq: u64) -> ChannelSeqSnapshot {
+    ChannelSeqSnapshot {
+        channel: SessionChannel::Control,
+        last_sent_seq,
+        last_received_seq,
+    }
+}
+
+fn plan_for(
+    old_transport: Arc<InMemoryTransport>,
+    old_channel: TransportChannel,
+    cursors: Vec<ChannelResumeCursor>,
+) -> MigrationPlan {
+    MigrationPlan {
+        old_transport,
+        old_channel,
+        target: TransportKind::LocalNetwork,
+        cursors,
+    }
+}
+
+fn control_cursors(session: &PeerSession) -> Vec<ChannelResumeCursor> {
+    vec![control_cursor(
+        session.last_sent_seq().unwrap_or(0),
+        session
+            .last_received_seq(MessageChannel::Control)
+            .unwrap_or(0),
+    )]
 }
 
 #[test]
@@ -410,5 +536,399 @@ fn hello_sequence_is_session_scoped_and_monotonic() {
             Ok(SequenceError::SessionMismatch { .. })
         ),
         "envelopes from another session must fail with SessionMismatch"
+    );
+}
+
+#[test]
+fn reconnect_after_channel_loss_restores_session() {
+    let (mut peer_a, mut peer_b) = local_peer_pair();
+    peer_a.open_control(&mut peer_b);
+    let lost_channel = peer_a.control_channel().clone();
+
+    peer_a
+        .transport()
+        .close(&lost_channel)
+        .expect("initiator side loses the channel");
+    peer_b
+        .transport()
+        .close(peer_b.remote_control_channel())
+        .expect("responder side loses the channel");
+    assert!(
+        !peer_a
+            .transport()
+            .is_open(&lost_channel)
+            .expect("lost channel metadata"),
+        "channel loss leaves the link closed"
+    );
+
+    let report = peer_a
+        .session_mut()
+        .disconnect(DisconnectTrigger::HeartbeatLost)
+        .expect("loss release routes state");
+    assert_eq!(report.from_state, SessionState::Connected);
+    assert_eq!(report.to_state, SessionState::Reconnecting);
+    assert_eq!(report.channels_closed, 1);
+    assert_eq!(report.workers_stopped, 1);
+    assert_eq!(peer_a.session().state(), SessionState::Reconnecting);
+
+    peer_a.install_backoff(backoff_config(3));
+    let decision = peer_a
+        .session_mut()
+        .resources_mut()
+        .backoff
+        .as_mut()
+        .expect("backoff installed")
+        .next_decision_with_jitter(|delay| delay);
+    assert_eq!(
+        decision,
+        ReconnectDecision::Retry {
+            attempt: 1,
+            delay: Duration::from_millis(50)
+        }
+    );
+
+    peer_a.attach_control(&mut peer_b, RECONNECTED_SESSION_ID);
+    assert_eq!(peer_a.session().session_id(), RECONNECTED_SESSION_ID);
+    assert_eq!(peer_a.session().state(), SessionState::Connected);
+
+    peer_a.hello();
+    let hello = peer_b.expect_hello();
+    assert_eq!(hello.session_id, RECONNECTED_SESSION_ID);
+    assert_eq!(hello.seq, 0);
+
+    let start = Instant::now();
+    let ping_seq = peer_a.ping(start);
+    assert_eq!(ping_seq, 1);
+    let ping = peer_b.expect_ping();
+    peer_b.pong(&ping);
+    let pong = peer_a.expect_pong();
+    assert!(peer_a.record_pong(&pong, start + Duration::from_millis(20)) >= 20);
+    assert!(
+        !peer_a
+            .transport()
+            .is_open(&lost_channel)
+            .expect("lost channel metadata"),
+        "the lost channel never comes back"
+    );
+}
+
+#[test]
+fn backoff_exhaustion_gives_up_before_release() {
+    let (mut peer_a, mut peer_b) = local_peer_pair();
+    peer_a.open_control(&mut peer_b);
+    peer_a.install_backoff(ReconnectBackoffConfig::new(
+        Duration::from_millis(20),
+        2,
+        Duration::from_secs(5),
+        2,
+    ));
+
+    let backoff = peer_a
+        .session_mut()
+        .resources_mut()
+        .backoff
+        .as_mut()
+        .expect("backoff installed");
+    assert_eq!(
+        backoff.next_decision_with_jitter(|delay| delay),
+        ReconnectDecision::Retry {
+            attempt: 1,
+            delay: Duration::from_millis(20)
+        }
+    );
+    assert_eq!(
+        backoff.next_decision_with_jitter(|delay| delay),
+        ReconnectDecision::Retry {
+            attempt: 2,
+            delay: Duration::from_millis(40)
+        }
+    );
+    assert!(backoff.is_exhausted());
+    assert_eq!(
+        backoff.next_decision_with_jitter(|delay| delay),
+        ReconnectDecision::GiveUp { attempts: 2 }
+    );
+    assert!(backoff.is_exhausted());
+
+    let report = peer_a
+        .session_mut()
+        .disconnect(DisconnectTrigger::TrustRevoked)
+        .expect("caller releases after the backoff gives up");
+    assert_eq!(report.to_state, SessionState::Released);
+    assert_eq!(peer_a.session().state(), SessionState::Released);
+}
+
+#[test]
+fn resume_requests_are_rejected_after_disconnect() {
+    let (mut peer_a, mut peer_b) = local_peer_pair();
+    peer_a.open_control(&mut peer_b);
+    let key = session_key("ab");
+
+    let old_transport = peer_a.transport().clone();
+    let old_channel = peer_a.control_channel().clone();
+    let responder_transport = peer_b.transport().clone();
+    let responder_channel = peer_b.remote_control_channel().clone();
+
+    let initiator = TransportMigrationInitiator::try_new(
+        initiator_config(),
+        SESSION_ID,
+        SessionChannel::Control,
+        SessionState::Connected,
+    )
+    .expect("initiator creates");
+    let mut responder = TransportMigrationResponder::try_new(
+        responder_config(),
+        SESSION_ID,
+        SessionChannel::Control,
+        ResumeKeyStore::inherit(SESSION_ID, key.clone()).expect("responder store"),
+        SessionState::Connected,
+    )
+    .expect("responder creates");
+    responder
+        .note_local_old_channel(responder_transport, responder_channel)
+        .expect("responder tracks old channel");
+    peer_a.session_mut().resources_mut().initiator = Some(initiator);
+    peer_b.session_mut().resources_mut().responder = Some(responder);
+
+    let stashed = peer_a
+        .session_mut()
+        .resources_mut()
+        .initiator
+        .as_mut()
+        .expect("initiator installed")
+        .begin(
+            plan_for(old_transport, old_channel, vec![control_cursor(0, 0)]),
+            key,
+            NOW_MS,
+        )
+        .expect("migration begins");
+    let outcome = peer_b
+        .session_mut()
+        .resources_mut()
+        .responder
+        .as_mut()
+        .expect("responder installed")
+        .handle_request(&stashed, NOW_MS + 10, Some(&[control_snapshot(0, 0)]))
+        .expect("responder handles the request");
+    let SessionResumeOutcome::Accepted(_accepted) = outcome else {
+        panic!("responder must accept the handshake request");
+    };
+
+    let released = peer_b
+        .session_mut()
+        .disconnect(DisconnectTrigger::PeerReleased)
+        .expect("responder releases");
+    assert!(
+        released.secrets_cleared,
+        "release tears down the responder and clears resume keys"
+    );
+    assert_eq!(released.to_state, SessionState::Released);
+    peer_a
+        .session_mut()
+        .disconnect(DisconnectTrigger::PeerReleased)
+        .expect("initiator releases");
+
+    let fresh_key = session_key("cd");
+    peer_a.attach_control(&mut peer_b, RECONNECTED_SESSION_ID);
+    let mut fresh_responder = TransportMigrationResponder::try_new(
+        responder_config(),
+        RECONNECTED_SESSION_ID,
+        SessionChannel::Control,
+        ResumeKeyStore::inherit(RECONNECTED_SESSION_ID, fresh_key).expect("fresh responder store"),
+        SessionState::Connected,
+    )
+    .expect("fresh responder creates");
+
+    let replay = MessageEnvelope::new(
+        "m-replay",
+        MessageType::Control(ControlMessageType::SessionResume),
+        SESSION_ID,
+        0,
+        NOW_MS,
+        stashed.clone(),
+    );
+    let payload = serde_json::to_vec(&replay).expect("encode stashed envelope");
+    peer_a
+        .transport()
+        .send(peer_a.control_channel(), payload)
+        .expect("replay raw send");
+    let error = peer_b
+        .session_mut()
+        .receive_envelope::<SessionResumeRequest>()
+        .expect_err("old session replay must fail");
+    assert!(
+        matches!(
+            error.downcast_inner::<SequenceError>(),
+            Ok(SequenceError::SessionMismatch { .. })
+        ),
+        "traffic bound to the old session is rejected by the sequence tracker"
+    );
+
+    let rekeyed = SessionResumeRequest::new(
+        RECONNECTED_SESSION_ID,
+        session_key("ab"),
+        stashed.migration.clone(),
+        stashed.cursors.clone(),
+        NOW_MS + 20,
+        NOW_MS + 220,
+    )
+    .expect("rekeyed request is valid");
+    peer_a.send_resume_request(rekeyed);
+    let replayed = peer_b.expect_resume_request();
+    let outcome = fresh_responder
+        .handle_request(&replayed.body, NOW_MS + 30, None)
+        .expect("fresh responder handles the replay");
+    let SessionResumeOutcome::Rejected(rejected) = outcome else {
+        panic!("the old resume key must be rejected on the fresh session");
+    };
+    assert_eq!(
+        rejected.reason,
+        ResumeRejectionReason::InvalidResumeKey,
+        "a disconnected session's resume key cannot open the reconnected one"
+    );
+}
+
+#[test]
+fn transport_resume_continues_sequence_across_migration() {
+    let (mut peer_a, mut peer_b) = local_peer_pair();
+    peer_a.open_control(&mut peer_b);
+
+    peer_a.hello();
+    let _hello = peer_b.expect_hello();
+    peer_b.welcome();
+    let _welcome = peer_a.expect_welcome();
+
+    let key = session_key("ab");
+    let old_transport = peer_a.transport().clone();
+    let old_channel = peer_a.control_channel().clone();
+    let responder_transport = peer_b.transport().clone();
+    let responder_channel = peer_b.remote_control_channel().clone();
+
+    let initiator = TransportMigrationInitiator::try_new(
+        initiator_config(),
+        SESSION_ID,
+        SessionChannel::Control,
+        SessionState::Connected,
+    )
+    .expect("initiator creates");
+    let mut responder = TransportMigrationResponder::try_new(
+        responder_config(),
+        SESSION_ID,
+        SessionChannel::Control,
+        ResumeKeyStore::inherit(SESSION_ID, key.clone()).expect("responder store"),
+        SessionState::Connected,
+    )
+    .expect("responder creates");
+    responder
+        .note_local_old_channel(responder_transport, responder_channel)
+        .expect("responder tracks old channel");
+    peer_a.session_mut().resources_mut().initiator = Some(initiator);
+    peer_b.session_mut().resources_mut().responder = Some(responder);
+
+    let cursors = control_cursors(peer_a.session());
+    let request = peer_a
+        .session_mut()
+        .resources_mut()
+        .initiator
+        .as_mut()
+        .expect("initiator installed")
+        .begin(plan_for(old_transport, old_channel, cursors), key, NOW_MS)
+        .expect("migration begins");
+    let snapshot = control_snapshot(0, 0);
+
+    peer_a.send_resume_request(request);
+    let received_request = peer_b.expect_resume_request();
+    assert_eq!(received_request.seq, 1);
+    let outcome = peer_b
+        .session_mut()
+        .resources_mut()
+        .responder
+        .as_mut()
+        .expect("responder installed")
+        .handle_request(&received_request.body, NOW_MS + 10, Some(&[snapshot]))
+        .expect("responder handles the request");
+    let SessionResumeOutcome::Accepted(accepted) = outcome else {
+        panic!("responder must accept the handshake request");
+    };
+    peer_b.send_resume_accepted(accepted);
+    let accepted = peer_a.expect_resume_accepted();
+    peer_a
+        .session_mut()
+        .resources_mut()
+        .initiator
+        .as_mut()
+        .expect("initiator installed")
+        .resume_accepted(&accepted, NOW_MS + 15)
+        .expect("initiator processes acceptance");
+
+    let new_channel = peer_a
+        .session()
+        .resources()
+        .initiator
+        .as_ref()
+        .expect("initiator installed")
+        .new_channel()
+        .expect("migrated channel opened")
+        .clone();
+    let transport_a = peer_a.transport().clone();
+    let transport_b = peer_b.transport().clone();
+    peer_a
+        .session_mut()
+        .adopt_primary(transport_a.clone(), new_channel.clone())
+        .expect("initiator adopts the migrated primary");
+    peer_b
+        .session_mut()
+        .adopt_primary(transport_b.clone(), new_channel.clone())
+        .expect("responder adopts the migrated primary");
+
+    let start = Instant::now();
+    let ping_seq = peer_a.ping(start);
+    assert_eq!(
+        ping_seq, 2,
+        "sequence continues across the migration without a replay"
+    );
+    let ping = peer_b.expect_ping();
+    peer_b.pong(&ping);
+    let pong = peer_a.expect_pong();
+    assert!(peer_a.record_pong(&pong, start + Duration::from_millis(20)) >= 20);
+
+    let old_channel_a = peer_a.control_channel().clone();
+    assert!(
+        transport_a
+            .is_open(&old_channel_a)
+            .expect("fallback channel metadata"),
+        "the old channel stays open as the migration fallback"
+    );
+    peer_a
+        .session_mut()
+        .resources_mut()
+        .initiator
+        .as_mut()
+        .expect("initiator installed")
+        .tick(NOW_MS + 76)
+        .expect("fallback expiry tick");
+    assert!(
+        !transport_a
+            .is_open(&old_channel_a)
+            .expect("fallback channel metadata"),
+        "fallback closes after its window"
+    );
+
+    let old_channel_b = peer_b.remote_control_channel().clone();
+    assert!(
+        peer_b
+            .session_mut()
+            .resources_mut()
+            .responder
+            .as_mut()
+            .expect("responder installed")
+            .close_expired_fallback(NOW_MS + 150)
+            .expect("responder closes its fallback")
+    );
+    assert!(
+        !transport_b
+            .is_open(&old_channel_b)
+            .expect("fallback channel metadata"),
+        "responder fallback closes too"
     );
 }
