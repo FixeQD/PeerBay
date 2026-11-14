@@ -1,6 +1,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
+
+use serde::de::DeserializeOwned;
 
 use peerbay_lib::discovery::DiscoveryRegistry;
 use peerbay_lib::identity::TransportCertificate;
@@ -18,7 +21,8 @@ use peerbay_lib::session::{
 };
 use peerbay_lib::storage::PeerTrustStore;
 use peerbay_lib::transport::{
-    ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportChannel, TransportKind,
+    ChannelKind, InMemoryTransport, PeerEndpoint, TcpTransport, TlsTransport, Transport,
+    TransportChannel, TransportKind,
 };
 
 const DEVICE_A: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -426,6 +430,115 @@ fn control_cursors(session: &PeerSession) -> Vec<ChannelResumeCursor> {
             .last_received_seq(MessageChannel::Control)
             .unwrap_or(0),
     )]
+}
+
+fn socket_endpoint(device_id: &str, port: u16) -> PeerEndpoint {
+    PeerEndpoint::new(
+        device_id,
+        format!("127.0.0.1:{}", port),
+        TransportKind::Loopback,
+    )
+    .expect("fixture socket endpoint")
+}
+
+trait PendingAccept {
+    fn accept_pending(&self) -> eros::Result<Option<TransportChannel>>;
+}
+
+impl PendingAccept for TcpTransport {
+    fn accept_pending(&self) -> eros::Result<Option<TransportChannel>> {
+        self.accept()
+    }
+}
+
+impl PendingAccept for TlsTransport {
+    fn accept_pending(&self) -> eros::Result<Option<TransportChannel>> {
+        self.accept()
+    }
+}
+
+fn wait_for_channel<T: PendingAccept>(transport: &T) -> TransportChannel {
+    for _ in 0..150 {
+        if let Some(channel) = transport.accept_pending().expect("accept polls") {
+            return channel;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("peer did not accept the channel");
+}
+
+fn drain_envelope<T: DeserializeOwned>(session: &mut PeerSession) -> MessageEnvelope<T> {
+    for _ in 0..150 {
+        if let Some(envelope) = session.receive_envelope().expect("receive polls") {
+            return envelope;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("peer did not deliver the envelope");
+}
+
+fn hello_ping_over<T>(initiator: &Arc<T>, responder: &Arc<T>, peer: &PeerEndpoint)
+where
+    T: Transport + PendingAccept + Send + Sync + 'static,
+{
+    let responder = Arc::clone(responder);
+    let responder_thread = thread::spawn(move || {
+        let channel = wait_for_channel(responder.as_ref());
+        let mut session_b =
+            PeerSession::new(SESSION_ID, Instant::now()).expect("session b creates");
+        session_b
+            .open_channel(responder.clone(), channel)
+            .expect("session b attaches");
+
+        let hello = drain_envelope::<()>(&mut session_b);
+        assert_eq!(hello.v, PROTOCOL_VERSION);
+        assert_eq!(hello.session_id, SESSION_ID);
+        assert_eq!(hello.seq, 0);
+        assert_eq!(
+            hello.message_type,
+            MessageType::Control(ControlMessageType::Hello)
+        );
+
+        session_b
+            .send_envelope(
+                MessageType::Control(ControlMessageType::Welcome),
+                (),
+                NOW_MS + 5,
+            )
+            .expect("welcome sends");
+        let ping = drain_envelope::<PingBody>(&mut session_b);
+        session_b.handle_liveness(&ping).expect("pong sends");
+    });
+
+    let channel = initiator
+        .open(peer, ChannelKind::Control)
+        .expect("control channel opens");
+    let now = Instant::now();
+    let mut session_a = PeerSession::new(SESSION_ID, now).expect("session a creates");
+    session_a
+        .open_channel(initiator.clone(), channel)
+        .expect("session a attaches");
+    session_a
+        .send_envelope(MessageType::Control(ControlMessageType::Hello), (), NOW_MS)
+        .expect("hello sends");
+
+    let welcome = drain_envelope::<()>(&mut session_a);
+    assert_eq!(welcome.seq, 0);
+    assert_eq!(
+        welcome.message_type,
+        MessageType::Control(ControlMessageType::Welcome)
+    );
+
+    let start = Instant::now();
+    let ping_seq = session_a.send_ping(start).expect("ping sends");
+    assert_eq!(ping_seq, 1);
+    let pong = drain_envelope::<PongBody>(&mut session_a);
+    let rtt = session_a
+        .on_pong(&pong, start + Duration::from_millis(20))
+        .expect("pong matches the pending ping");
+    assert!(rtt.rtt_ms_saturating() >= 20);
+
+    responder_thread.join().expect("responder thread joins");
 }
 
 #[test]
@@ -931,4 +1044,31 @@ fn transport_resume_continues_sequence_across_migration() {
             .expect("fallback channel metadata"),
         "responder fallback closes too"
     );
+}
+
+#[test]
+fn loopback_tcp_peers_complete_hello_and_ping() {
+    let endpoint_a = socket_endpoint("peer-tcp-e2e-a", 19301);
+    let endpoint_b = socket_endpoint("peer-tcp-e2e-b", 19302);
+    let (tcp_a, tcp_b) = TcpTransport::pair(endpoint_a, endpoint_b.clone()).expect("tcp pair");
+    hello_ping_over(&Arc::new(tcp_a), &Arc::new(tcp_b), &endpoint_b);
+}
+
+#[test]
+fn loopback_tls_peers_complete_hello_and_ping_with_pinned_certs() {
+    let certificate_a =
+        TransportCertificate::generate_for_device(DEVICE_A).expect("certificate a generates");
+    let certificate_b =
+        TransportCertificate::generate_for_device(DEVICE_B).expect("certificate b generates");
+    let tls_a = TlsTransport::with_certificate(
+        socket_endpoint(DEVICE_A, 19911),
+        certificate_a,
+        Some(certificate_b.certificate_der().to_vec()),
+    )
+    .expect("tls client creates");
+    let tls_b =
+        TlsTransport::with_certificate(socket_endpoint(DEVICE_B, 19912), certificate_b, None)
+            .expect("tls server creates");
+    let peer_b = socket_endpoint(DEVICE_B, 19912);
+    hello_ping_over(&Arc::new(tls_a), &Arc::new(tls_b), &peer_b);
 }
