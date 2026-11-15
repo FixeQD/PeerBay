@@ -32,6 +32,7 @@ pub enum PairingExchangeError {
     InvalidSessionToken,
     TrustPersistFailed,
     TokenExpired,
+    SessionLockPoisoned,
 }
 
 impl Display for PairingExchangeError {
@@ -87,6 +88,9 @@ impl Display for PairingExchangeError {
                 write!(formatter, "pairing trust record could not be persisted")
             }
             Self::TokenExpired => write!(formatter, "pairing session token has expired"),
+            Self::SessionLockPoisoned => {
+                write!(formatter, "pairing session lock is poisoned")
+            }
         }
     }
 }
