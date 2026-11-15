@@ -56,6 +56,10 @@ pub fn validate_display_name(value: &str) -> eros::Result<()> {
     Ok(())
 }
 
+pub fn validate_platform(value: &str) -> eros::Result<()> {
+    validate_display_name(value)
+}
+
 fn is_disallowed_format_character(character: char) -> bool {
     matches!(
         character,

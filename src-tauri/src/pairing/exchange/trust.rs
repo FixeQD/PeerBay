@@ -1,4 +1,5 @@
 use super::crypto::{hex_decode, hex_encode, now_ms};
+use crate::identity::{validate_display_name, validate_platform};
 use crate::pairing::PairingExchangeError;
 use crate::storage::PeerRecord;
 
@@ -21,6 +22,11 @@ pub fn build_peer_record(
         .map_err(|_| PairingExchangeError::InvalidCertificateFingerprint)?;
     PeerRecord::validate_device_id(peer_device_id)
         .map_err(|_| PairingExchangeError::InvalidDeviceId)?;
+
+    let display_name = display_name.into();
+    validate_display_name(&display_name).map_err(|_| PairingExchangeError::InvalidDisplayName)?;
+    let platform = platform.into();
+    validate_platform(&platform).map_err(|_| PairingExchangeError::InvalidPlatform)?;
 
     let created_at = now_ms();
     let mut record = PeerRecord::new(

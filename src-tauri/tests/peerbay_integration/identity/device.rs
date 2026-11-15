@@ -121,6 +121,28 @@ fn identity_rejects_surrounding_unicode_whitespace() {
 }
 
 #[test]
+fn platform_validation_matches_display_name_rules() {
+    assert!(peerbay_lib::identity::validate_platform("Linux").is_ok());
+    assert_eq!(
+        identity_error(peerbay_lib::identity::validate_platform("\u{202e}xunil")),
+        DeviceIdentityError::DisplayNameFormatCharacter
+    );
+    assert_eq!(
+        identity_error(peerbay_lib::identity::validate_platform(" ")),
+        DeviceIdentityError::EmptyDisplayName
+    );
+    assert_eq!(
+        identity_error(peerbay_lib::identity::validate_platform(
+            &"x".repeat(MAX_DEVICE_NAME_LENGTH + 1)
+        )),
+        DeviceIdentityError::DisplayNameTooLong {
+            length: MAX_DEVICE_NAME_LENGTH + 1,
+            max: MAX_DEVICE_NAME_LENGTH,
+        }
+    );
+}
+
+#[test]
 fn identity_rejects_unicode_format_and_bidi_controls() {
     for value in [
         "Phone\u{200b}Name",

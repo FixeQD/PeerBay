@@ -14,7 +14,7 @@ pub use errors::{
 };
 pub use keypair::{IdentityKeyPair, PrivateKeyBytes};
 pub use store::IdentityKeyStore;
-pub use validation::{MAX_DEVICE_NAME_LENGTH, validate_display_name};
+pub use validation::{MAX_DEVICE_NAME_LENGTH, validate_display_name, validate_platform};
 
 pub const IDENTITY_PRIVATE_KEY_LENGTH: usize = 32;
 pub const IDENTITY_PUBLIC_KEY_LENGTH: usize = 32;

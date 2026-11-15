@@ -744,3 +744,70 @@ fn redaction_046_string_and_path_guard() {
     );
     assert!(peerbay_lib::redaction::RedactionPolicy::redact_string("secret", None).contains("***"));
 }
+
+#[test]
+fn peer_trust_store_rejects_unsafe_peer_strings_on_save_and_load() {
+    use peerbay_lib::storage::PeerTrustStore;
+    let dir = tempfile::tempdir().unwrap();
+    let peers_dir = dir.path().join("peers");
+    fs::create_dir(&peers_dir).unwrap();
+    let store = PeerTrustStore::new(peers_dir.clone());
+    let peer_id = "123e4567-e89b-12d3-a456-426614174000";
+    let fingerprint = "a".repeat(64);
+
+    let bidi_name = peerbay_lib::storage::PeerRecord::new(
+        peer_id,
+        "\u{202e}Phone",
+        "linux",
+        fingerprint.as_str(),
+        "hash",
+        "ip",
+    );
+    let error = store
+        .save(peer_id, &bidi_name)
+        .expect_err("bidi display name must be rejected on save");
+    let storage_error = error
+        .downcast_inner::<StorageError>()
+        .expect("storage error should be preserved");
+    assert!(matches!(
+        storage_error,
+        StorageError::ValidationFailed { .. }
+    ));
+
+    let control_platform = peerbay_lib::storage::PeerRecord::new(
+        peer_id,
+        "Phone",
+        "android\u{0001}",
+        fingerprint.as_str(),
+        "hash",
+        "ip",
+    );
+    assert!(store.save(peer_id, &control_platform).is_err());
+
+    let zero_width_transport = peerbay_lib::storage::PeerRecord::new(
+        peer_id,
+        "Phone",
+        "linux",
+        fingerprint.as_str(),
+        "hash",
+        "\u{200b}ip",
+    );
+    assert!(store.save(peer_id, &zero_width_transport).is_err());
+
+    let record_path = peers_dir.join(format!("{}.json", peer_id));
+    fs::write(
+        &record_path,
+        r#"{"schema_version":1,"payload":{"device_id":"123e4567-e89b-12d3-a456-426614174000","display_name":"\u202ePhone","platform":"linux","certificate_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pairing_token_hash":"hash","created_at":0,"last_seen_at":null,"last_addresses":[],"preferred_transport":"ip","capabilities_snapshot":"{}","feature_policies":null,"revoked_at":null}}"#,
+    )
+    .unwrap();
+    let load_error = store
+        .load(peer_id)
+        .expect_err("persisted bidi display name must be rejected on load");
+    let storage_error = load_error
+        .downcast_inner::<StorageError>()
+        .expect("storage error should be preserved");
+    assert!(matches!(
+        storage_error,
+        StorageError::ValidationFailed { .. }
+    ));
+}

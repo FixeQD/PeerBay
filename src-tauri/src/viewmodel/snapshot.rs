@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::app::LifecycleState;
 use crate::discovery::DiscoveredPeer;
-use crate::identity::{DeviceIdentity, MAX_DEVICE_NAME_LENGTH, validate_display_name};
+use crate::identity::{DeviceIdentity, validate_display_name, validate_platform};
 use crate::protocol::CapabilityDocument;
 use crate::redaction::RedactionPolicy;
 use crate::session::SessionState;
@@ -397,37 +397,9 @@ fn validate_peer_strings(source: &DeviceSource<'_>) -> eros::Result<()> {
             field: "display_name"
         })
     })?;
-    validate_platform_string(&source.platform)
+    validate_platform(&source.platform)
         .map_err(|_| eros::error!(ViewModelError::InvalidPeerField { field: "platform" }))?;
     Ok(())
-}
-
-fn validate_platform_string(value: &str) -> eros::Result<()> {
-    if value.trim().is_empty()
-        || value != value.trim()
-        || value.chars().any(char::is_control)
-        || value.chars().any(is_disallowed_format_character)
-        || value
-            .chars()
-            .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
-        || value.len() > MAX_DEVICE_NAME_LENGTH
-    {
-        return Err(eros::error!(ViewModelError::InvalidPeerField {
-            field: "platform"
-        }));
-    }
-    Ok(())
-}
-
-fn is_disallowed_format_character(character: char) -> bool {
-    matches!(
-        character,
-        '\u{061c}'
-            | '\u{200b}'..='\u{200f}'
-            | '\u{202a}'..='\u{202e}'
-            | '\u{2060}'..='\u{206f}'
-            | '\u{feff}'
-    )
 }
 
 fn available_actions(status: TrustStatus, has_active_session: bool) -> Vec<DeviceActionView> {

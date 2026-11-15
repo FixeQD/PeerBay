@@ -92,6 +92,65 @@ fn responder_accept_persists_trust_and_issues_session_token() {
 }
 
 #[test]
+fn responder_accept_rejects_unsafe_peer_display_name() {
+    let (mut _initiator, mut responder) = confirmed_pair();
+    let (store, _dir) = trust_store();
+
+    let err = responder
+        .accept(&store, "\u{202e}Phone", "android")
+        .expect_err("bidi override in peer display name must be rejected");
+    assert_eq!(err, PairingExchangeError::InvalidDisplayName);
+    assert_eq!(responder.state(), PairingExchangeState::Confirmed);
+    assert!(store.load(INITIATOR_DEVICE_ID).is_err());
+}
+
+#[test]
+fn responder_accept_rejects_unsafe_peer_platform() {
+    let (mut _initiator, mut responder) = confirmed_pair();
+    let (store, _dir) = trust_store();
+
+    let err = responder
+        .accept(&store, "Phone", "android\u{0001}")
+        .expect_err("control character in peer platform must be rejected");
+    assert_eq!(err, PairingExchangeError::InvalidPlatform);
+    assert_eq!(responder.state(), PairingExchangeState::Confirmed);
+    assert!(store.load(INITIATOR_DEVICE_ID).is_err());
+}
+
+#[test]
+fn initiator_apply_accepted_rejects_unsafe_peer_display_name() {
+    let (mut initiator, mut responder) = confirmed_pair();
+    let (store, _dir) = trust_store();
+
+    let accepted = responder
+        .accept(&store, "Phone", "android")
+        .expect("responder accept should persist trust");
+
+    let code = initiator
+        .emit_pairing_code(10_000)
+        .expect("initiator should still be able to emit its pairing code");
+    let confirm =
+        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+            .expect("confirmation should be valid");
+    initiator
+        .verify_pairing_confirm(&confirm)
+        .expect("initiator should record its own SAS confirmation before applying accepted trust");
+
+    let err = initiator
+        .apply_accepted(
+            &store,
+            RESPONDER_DEVICE_ID,
+            &accepted,
+            "\u{200b}Phone",
+            "android",
+        )
+        .expect_err("zero-width character in peer display name must be rejected");
+    assert_eq!(err, PairingExchangeError::InvalidDisplayName);
+    assert_eq!(initiator.state(), PairingExchangeState::Confirmed);
+    assert!(store.load(RESPONDER_DEVICE_ID).is_err());
+}
+
+#[test]
 fn persisted_trust_record_never_contains_the_raw_session_token() {
     let (mut _initiator, mut responder) = confirmed_pair();
     let (store, _dir) = trust_store();

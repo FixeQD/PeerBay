@@ -120,6 +120,30 @@ impl PeerRecord {
         Ok(())
     }
 
+    pub fn validate_display_name(display_name: &str) -> eros::Result<()> {
+        crate::identity::validate_display_name(display_name).map_err(|_| {
+            eros::error!(StorageError::ValidationFailed {
+                reason: "display name must be a safe device label"
+            })
+        })
+    }
+
+    pub fn validate_platform(platform: &str) -> eros::Result<()> {
+        crate::identity::validate_platform(platform).map_err(|_| {
+            eros::error!(StorageError::ValidationFailed {
+                reason: "platform must be a safe device label"
+            })
+        })
+    }
+
+    pub fn validate_preferred_transport(preferred_transport: &str) -> eros::Result<()> {
+        crate::identity::validate_platform(preferred_transport).map_err(|_| {
+            eros::error!(StorageError::ValidationFailed {
+                reason: "preferred transport must be a safe transport label"
+            })
+        })
+    }
+
     pub fn revoke(&mut self, at_ms: u64) {
         self.revoked_at = Some(at_ms);
     }
@@ -148,6 +172,9 @@ impl PeerTrustStore {
             PeerRecord::validate_device_id(&record.device_id)?;
         }
         PeerRecord::validate_addresses(&record.last_addresses)?;
+        PeerRecord::validate_display_name(&record.display_name)?;
+        PeerRecord::validate_platform(&record.platform)?;
+        PeerRecord::validate_preferred_transport(&record.preferred_transport)?;
         Ok(record)
     }
 
@@ -155,6 +182,9 @@ impl PeerTrustStore {
         PeerRecord::validate_fingerprint(&record.certificate_fingerprint)?;
         PeerRecord::validate_device_id(&record.device_id)?;
         PeerRecord::validate_addresses(&record.last_addresses)?;
+        PeerRecord::validate_display_name(&record.display_name)?;
+        PeerRecord::validate_platform(&record.platform)?;
+        PeerRecord::validate_preferred_transport(&record.preferred_transport)?;
         let record_path = self.resolve_path(peer_id)?;
         let store: VersionedJsonStore<PeerRecord> = VersionedJsonStore::new(record_path);
         store.save(record)?;

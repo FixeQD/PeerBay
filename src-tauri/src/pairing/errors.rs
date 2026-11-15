@@ -5,6 +5,8 @@ pub enum PairingExchangeError {
     InvalidPairingId,
     InvalidDeviceId,
     InvalidCertificateFingerprint,
+    InvalidDisplayName,
+    InvalidPlatform,
     InvalidCommitment,
     InvalidNonce,
     InvalidProtocolVersions,
@@ -40,6 +42,8 @@ impl Display for PairingExchangeError {
             Self::InvalidCertificateFingerprint => {
                 write!(formatter, "certificate fingerprint is invalid")
             }
+            Self::InvalidDisplayName => write!(formatter, "peer display name is invalid"),
+            Self::InvalidPlatform => write!(formatter, "peer platform is invalid"),
             Self::InvalidCommitment => {
                 write!(formatter, "commitment is not canonical lowercase hex")
             }
