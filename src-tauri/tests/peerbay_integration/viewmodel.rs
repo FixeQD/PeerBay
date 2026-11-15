@@ -8,9 +8,9 @@ use peerbay_lib::protocol::CapabilityDocument;
 use peerbay_lib::session::SessionState;
 use peerbay_lib::storage::PeerRecord;
 use peerbay_lib::viewmodel::{
-    AppViewModel, DeviceAction, DeviceView, FeatureRowState, FeatureRowView, MAX_DEVICES,
-    MAX_SESSIONS, MAX_SNAPSHOT_BYTES, SessionSummary, SnapshotInputs, TrustStatus,
-    VIEWMODEL_SCHEMA_VERSION, ViewModelError,
+    AppViewModel, DeviceAction, DeviceView, ErrorDetail, ErrorFeatureScope, ErrorView,
+    FeatureRowState, FeatureRowView, MAX_DEVICES, MAX_SESSIONS, MAX_SNAPSHOT_BYTES, SessionSummary,
+    SnapshotInputs, TrustStatus, VIEWMODEL_SCHEMA_VERSION, ViewModelError, ViewModelErrorCode,
 };
 
 const LOCAL_DEVICE_ID: &str = "33333333-3333-4333-8333-333333333333";
@@ -662,4 +662,197 @@ fn local_identity_view_excludes_secret_material() {
     assert!(!serialized.contains("fingerprint"));
     assert!(!serialized.contains("certificate"));
     assert!(!serialized.contains("token"));
+}
+
+#[test]
+fn every_viewmodel_error_maps_to_a_redacted_error_view() {
+    let cases = [
+        (
+            ViewModelError::EmittedAtTooOld {
+                value: SNAPSHOT_NOW_MS,
+            },
+            ViewModelErrorCode::SnapshotEmittedAtStale,
+            ErrorFeatureScope::Snapshot,
+            "error.snapshot_emitted_at_stale",
+            None,
+        ),
+        (
+            ViewModelError::TooManyDevices {
+                count: MAX_DEVICES + 1,
+            },
+            ViewModelErrorCode::SnapshotDeviceLimit,
+            ErrorFeatureScope::Devices,
+            "error.snapshot_device_limit",
+            Some(ErrorDetail::Limit {
+                value: MAX_DEVICES + 1,
+                limit: MAX_DEVICES,
+            }),
+        ),
+        (
+            ViewModelError::TooManySessions {
+                count: MAX_SESSIONS + 1,
+            },
+            ViewModelErrorCode::SnapshotSessionLimit,
+            ErrorFeatureScope::Sessions,
+            "error.snapshot_session_limit",
+            Some(ErrorDetail::Limit {
+                value: MAX_SESSIONS + 1,
+                limit: MAX_SESSIONS,
+            }),
+        ),
+        (
+            ViewModelError::SnapshotTooLarge {
+                size: MAX_SNAPSHOT_BYTES + 1,
+            },
+            ViewModelErrorCode::SnapshotTooLarge,
+            ErrorFeatureScope::Snapshot,
+            "error.snapshot_too_large",
+            Some(ErrorDetail::Limit {
+                value: MAX_SNAPSHOT_BYTES + 1,
+                limit: MAX_SNAPSHOT_BYTES,
+            }),
+        ),
+        (
+            ViewModelError::UnknownSessionPeer,
+            ViewModelErrorCode::SnapshotSessionIntegrity,
+            ErrorFeatureScope::Sessions,
+            "error.snapshot_session_integrity",
+            None,
+        ),
+        (
+            ViewModelError::InvalidPeerField {
+                field: "display_name",
+            },
+            ViewModelErrorCode::PeerFieldInvalid,
+            ErrorFeatureScope::Devices,
+            "error.peer_field_invalid",
+            Some(ErrorDetail::Field {
+                field: "display_name".to_owned(),
+            }),
+        ),
+    ];
+    for (error, code, scope, message_key, detail) in &cases {
+        let view = ErrorView::from(error);
+        assert_eq!(view.code, *code);
+        assert_eq!(view.user_message_key, *message_key);
+        assert_eq!(view.feature_scope, *scope);
+        assert_eq!(view.detail, *detail);
+        assert!(!view.retryable);
+    }
+}
+
+#[test]
+fn error_view_wire_contract_is_snake_case_and_roundtrips() {
+    let limit_view = ErrorView::from(&ViewModelError::TooManyDevices {
+        count: MAX_DEVICES + 1,
+    });
+    let serialized = serde_json::to_string(&limit_view).unwrap();
+    assert!(serialized.contains("\"code\":\"snapshot_device_limit\""));
+    assert!(serialized.contains("\"user_message_key\":\"error.snapshot_device_limit\""));
+    assert!(serialized.contains("\"retryable\":false"));
+    assert!(serialized.contains("\"feature_scope\":\"devices\""));
+    assert!(serialized.contains("\"detail\":{\"limit\":{\"value\":1025,\"limit\":1024}}"));
+    assert!(!serialized.contains("\"schemaVersion\""));
+    let deserialized: ErrorView = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized, limit_view);
+
+    let field_view = ErrorView::from(&ViewModelError::InvalidPeerField { field: "platform" });
+    let serialized = serde_json::to_string(&field_view).unwrap();
+    assert!(serialized.contains("\"code\":\"peer_field_invalid\""));
+    assert!(serialized.contains("\"detail\":{\"field\":{\"field\":\"platform\"}}"));
+    let deserialized: ErrorView = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized, field_view);
+}
+
+#[test]
+fn error_views_exclude_technical_and_private_data() {
+    let errors = [
+        ViewModelError::EmittedAtTooOld {
+            value: SNAPSHOT_NOW_MS,
+        },
+        ViewModelError::TooManyDevices {
+            count: MAX_DEVICES + 1,
+        },
+        ViewModelError::TooManySessions {
+            count: MAX_SESSIONS + 1,
+        },
+        ViewModelError::SnapshotTooLarge {
+            size: MAX_SNAPSHOT_BYTES + 1,
+        },
+        ViewModelError::UnknownSessionPeer,
+        ViewModelError::InvalidPeerField { field: "platform" },
+    ];
+    for error in &errors {
+        let view = ErrorView::from(error);
+        let serialized = serde_json::to_string(&view).unwrap();
+        assert!(!serialized.contains(&"a".repeat(64)));
+        assert!(!serialized.contains('/'));
+        assert!(!serialized.contains('\\'));
+        assert!(!serialized.contains("technical_message"));
+        assert!(!serialized.contains("correlation_id"));
+        assert!(!serialized.contains("platform_code"));
+        assert!(!serialized.contains("stack"));
+    }
+}
+
+#[test]
+fn real_snapshot_build_failures_map_to_error_views() {
+    let identity = local_identity();
+    let capabilities = local_capabilities();
+
+    let stale = SnapshotInputs {
+        now_ms: 1_000,
+        lifecycle: LifecycleState::Ready,
+        identity: &identity,
+        capabilities: &capabilities,
+        discovered: &[],
+        trusted: &[],
+        sessions: &[],
+        active_workers: 0,
+    };
+    let view = ErrorView::from(&viewmodel_error(AppViewModel::build(stale)));
+    assert_eq!(view.code, ViewModelErrorCode::SnapshotEmittedAtStale);
+    assert_eq!(view.feature_scope, ErrorFeatureScope::Snapshot);
+    assert_eq!(view.detail, None);
+
+    let trusted = vec![trusted_record(PEER_DEVICE_ID, "Phone Alpha")];
+    let sessions = vec![session_summary(
+        "session-1",
+        "99999999-9999-4999-8999-999999999999",
+        SessionState::Connected,
+    )];
+    let view = ErrorView::from(&viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &trusted,
+        &sessions,
+    ))));
+    assert_eq!(view.code, ViewModelErrorCode::SnapshotSessionIntegrity);
+    assert_eq!(view.feature_scope, ErrorFeatureScope::Sessions);
+
+    let sessions: Vec<SessionSummary> = (0..MAX_SESSIONS + 1)
+        .map(|index| {
+            session_summary(
+                &format!("session-{index:04}"),
+                PEER_DEVICE_ID,
+                SessionState::Connected,
+            )
+        })
+        .collect();
+    let view = ErrorView::from(&viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &trusted,
+        &sessions,
+    ))));
+    assert_eq!(view.code, ViewModelErrorCode::SnapshotSessionLimit);
+    assert_eq!(
+        view.detail,
+        Some(ErrorDetail::Limit {
+            value: MAX_SESSIONS + 1,
+            limit: MAX_SESSIONS,
+        })
+    );
 }

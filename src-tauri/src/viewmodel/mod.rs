@@ -1,7 +1,9 @@
 //! Projections of Rust application state for the WebView.
 
+pub mod error;
 pub mod snapshot;
 
+pub use error::{ErrorDetail, ErrorFeatureScope, ErrorView, ViewModelErrorCode};
 pub use snapshot::{
     AppStatusView, AppViewModel, DeviceAction, DeviceActionView, DeviceView,
     DiagnosticsSummaryView, FeatureRowState, FeatureRowView, LocalIdentityView, MAX_DEVICES,
