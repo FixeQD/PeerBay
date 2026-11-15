@@ -40,7 +40,7 @@ pub fn try_store_secret(
 }
 
 /// Load a secret from secure storage or fallback file.
-pub fn try_load_secret(_label: &str, seed: &str, fallback_path: &Path) -> eros::Result<Vec<u8>> {
+pub fn try_load_secret(label: &str, seed: &str, fallback_path: &Path) -> eros::Result<Vec<u8>> {
     let result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -48,8 +48,16 @@ pub fn try_load_secret(_label: &str, seed: &str, fallback_path: &Path) -> eros::
         .block_on(async {
             use secret_service::{EncryptionType, SecretService};
             match SecretService::connect(EncryptionType::Dh).await {
-                Ok(ss) => {
-                    let _collection = ss.get_default_collection().await.ok()?;
+                Ok(service) => {
+                    let collection = service.get_default_collection().await.ok()?;
+                    let mut properties = HashMap::new();
+                    properties.insert("label", label);
+                    let items = collection.search_items(properties).await.ok()?;
+                    for item in items {
+                        if let Ok(secret) = item.get_secret().await {
+                            return Some(secret);
+                        }
+                    }
                     None
                 }
                 Err(_) => None,

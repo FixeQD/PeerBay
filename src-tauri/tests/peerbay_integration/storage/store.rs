@@ -590,25 +590,29 @@ fn peer_trust_feature_policies_with_injection_retry() {
     );
 }
 
-fn encrypted_fallback_roundtrip_and_rejects_tampered_nonce() {
+#[test]
+fn encrypted_fallback_roundtrip_and_rejects_tampered_envelope() {
     use peerbay_lib::security::encrypted_fallback;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("secret.enc");
     let seed = "test-seed-v1";
     let plaintext = b"private identity key material - do not log";
+    let first = encrypted_fallback::encrypt_local(plaintext, seed);
+    let second = encrypted_fallback::encrypt_local(plaintext, seed);
+    assert!(
+        first != second,
+        "per-record salt must make repeated encryptions differ"
+    );
     encrypted_fallback::write_encrypted_atomic(&path, plaintext, seed).expect("encrypt write ok");
-    // Normal read
     let decrypted = encrypted_fallback::read_encrypted_atomic(&path, seed).expect("decrypt ok");
     assert_eq!(&decrypted[..], plaintext.as_slice());
-    // Tampered nonce
     let mut tampered = fs::read(&path).unwrap();
     tampered[0] = 0xFF;
     fs::write(&path, &tampered).unwrap();
     assert!(
         encrypted_fallback::read_encrypted_atomic(&path, seed).is_none(),
-        "tampered nonce must fail"
+        "tampered salt must fail"
     );
-    // Wrong seed
     assert!(
         encrypted_fallback::read_encrypted_atomic(&path, "bad-seed").is_none(),
         "bad seed must fail"
@@ -645,6 +649,7 @@ fn redaction_does_not_leak_token_fingerprint_or_path() {
     );
 }
 
+#[test]
 fn custom_cipher_roundtrip_and_rejects_bad_magic() {
     use peerbay_lib::security::custom_cipher;
     let dir = tempfile::tempdir().unwrap();
@@ -654,7 +659,6 @@ fn custom_cipher_roundtrip_and_rejects_bad_magic() {
     custom_cipher::write_custom_atomic(&path, plaintext, seed).expect("custom write ok");
     let loaded = custom_cipher::read_custom_atomic(&path, seed).expect("custom read ok");
     assert_eq!(&loaded[..], plaintext.as_slice());
-    // Bad magic
     let bad_magic = b"NOTPEERBAYENC".to_vec();
     assert!(
         custom_cipher::decrypt_custom(&bad_magic, seed).is_none(),
@@ -662,35 +666,34 @@ fn custom_cipher_roundtrip_and_rejects_bad_magic() {
     );
 }
 
-fn custom_cipher_rejects_bad_version_and_bad_mac() {
+#[test]
+fn custom_cipher_rejects_bad_version_and_corrupt_ciphertext() {
     use peerbay_lib::security::custom_cipher;
     let seed = "seed-v1";
     let data = b"test";
     let encrypted = custom_cipher::encrypt_custom(data, seed);
-    // Corrupt version byte
     let mut bad_version = encrypted.clone();
     bad_version[10] = 0xFF;
     assert!(
         custom_cipher::decrypt_custom(&bad_version, seed).is_none(),
         "bad version rejected"
     );
-    // Corrupt MAC
-    let mut bad_mac = encrypted.clone();
-    let mac_end = bad_mac.len() - 1;
-    bad_mac[mac_end] = 0xFF;
+    let mut corrupted = encrypted.clone();
+    let last = corrupted.len() - 1;
+    corrupted[last] = 0xFF;
     assert!(
-        custom_cipher::decrypt_custom(&bad_mac, seed).is_none(),
-        "tampered MAC rejected"
+        custom_cipher::decrypt_custom(&corrupted, seed).is_none(),
+        "tampered ciphertext rejected by the GCM authentication tag"
     );
-    // Corrupt nonce length
     let mut bad_nonce_len = encrypted.clone();
-    bad_nonce_len[11] = 0;
+    bad_nonce_len[27] = 0;
     assert!(
         custom_cipher::decrypt_custom(&bad_nonce_len, seed).is_none(),
         "bad nonce len rejected"
     );
 }
 
+#[test]
 fn custom_cipher_rejects_symlink_target_escape() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("symlink.pbz");
@@ -703,19 +706,51 @@ fn custom_cipher_rejects_symlink_target_escape() {
     );
 }
 
+#[test]
 fn custom_cipher_rejects_corrupt_payload_length() {
     use peerbay_lib::security::custom_cipher;
     let seed = "seed-v1";
     let data = b"x";
     let encrypted = custom_cipher::encrypt_custom(data, seed);
     let mut bad_len = encrypted.clone();
-    bad_len[12] = 0xFF;
-    bad_len[13] = 0xFF;
-    bad_len[14] = 0xFF;
-    bad_len[15] = 0xFF;
+    bad_len[28] = 0xFF;
+    bad_len[29] = 0xFF;
+    bad_len[30] = 0xFF;
+    bad_len[31] = 0xFF;
     assert!(
         custom_cipher::decrypt_custom(&bad_len, seed).is_none(),
         "bad payload len rejected"
+    );
+}
+
+#[test]
+fn try_load_secret_uses_encrypted_fallback_when_secret_service_has_no_item() {
+    use peerbay_lib::security::encrypted_fallback;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.key");
+    let seed = "test-seed-v1";
+    encrypted_fallback::write_encrypted_atomic(&path, b"secret identity bytes", seed)
+        .expect("fallback write ok");
+    let loaded = peerbay_lib::security::secure_storage_adapter::try_load_secret(
+        "peerbay-identity-key-probe",
+        seed,
+        &path,
+    )
+    .expect("secret load should reach the encrypted fallback");
+    assert_eq!(loaded, b"secret identity bytes");
+}
+
+#[test]
+fn try_load_secret_fails_without_secret_service_item_or_fallback_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("missing.key");
+    assert!(
+        peerbay_lib::security::secure_storage_adapter::try_load_secret(
+            "peerbay-missing-secret-probe",
+            "test-seed-v1",
+            &path,
+        )
+        .is_err()
     );
 }
 

@@ -5,105 +5,82 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use sha2::{Digest, Sha256};
+use argon2::{Algorithm, Argon2, Params, Version};
 use zeroize::Zeroizing;
 
 pub const PEERBAY_MAGIC: &[u8] = b"PEERBAYENC";
-pub const CURRENT_CIPHER_VERSION: u8 = 1;
+pub const CURRENT_CIPHER_VERSION: u8 = 2;
 
-pub fn derive_cipher_keys(seed: &str) -> (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>) {
-    let mut aes_hasher = Sha256::new();
-    aes_hasher.update(seed.as_bytes());
-    aes_hasher.update(b"peerbay-aes-v1");
-    let aes_key: [u8; 32] = aes_hasher.finalize().into();
+const SALT_LENGTH: usize = 16;
 
-    let mut mac_hasher = Sha256::new();
-    mac_hasher.update(seed.as_bytes());
-    mac_hasher.update(b"peerbay-mac-v1");
-    let mac_key: [u8; 32] = mac_hasher.finalize().into();
-    (Zeroizing::new(aes_key), Zeroizing::new(mac_key))
+pub fn derive_cipher_key(seed: &str, salt: &[u8]) -> Zeroizing<[u8; 32]> {
+    let mut derived = Zeroizing::new([0_u8; 32]);
+    let params = Params::new(19456, 2, 1, Some(32)).expect("valid argon2 params");
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    argon2
+        .hash_password_into(seed.as_bytes(), salt, derived.as_mut())
+        .expect("argon2 key derivation");
+    derived
 }
 
-pub fn compute_mac(data: &[u8], mac_key: &[u8; 32]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(mac_key.as_slice());
-    hasher.update(data);
-    hasher.finalize().into()
-}
-
-/// Custom format: PEERBAYENC + version(1) + nonce_len(1) + payload_len(4 LE) + nonce + ciphertext + mac(32)
+/// Custom format: PEERBAYENC + version(1) + salt(16) + nonce_len(1) + payload_len(4 LE) + nonce + ciphertext
 pub fn encrypt_custom(data: &[u8], seed: &str) -> Vec<u8> {
-    let (aes_key, mac_key) = derive_cipher_keys(seed);
-    let key = aes_gcm::Key::<Aes256Gcm>::try_from(aes_key.as_slice()).expect("valid key length");
+    let salt: [u8; SALT_LENGTH] = rand::random();
+    let key_bytes = derive_cipher_key(seed, &salt);
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(key_bytes.as_slice()).expect("valid key length");
     let cipher = Aes256Gcm::new(&key);
 
-    // 12-byte random nonce
     let nonce_bytes: [u8; 12] = rand::random();
     let nonce = Nonce::try_from(&nonce_bytes[..]).expect("valid nonce length");
     let ciphertext = cipher.encrypt(&nonce, data).expect("AES-GCM encrypt");
 
     let payload_len = ciphertext.len() as u32;
 
-    // Assemble header + ciphertext
-    let mut bundle = Vec::with_capacity(10 + 1 + 4 + nonce_bytes.len() + ciphertext.len() + 32);
-    bundle.extend_from_slice(PEERBAY_MAGIC); // 10
-    bundle.push(CURRENT_CIPHER_VERSION); // 1
-    bundle.push(nonce_bytes.len() as u8); // 1 (should be 12)
-    bundle.extend_from_slice(&payload_len.to_le_bytes()); // 4
-    bundle.extend_from_slice(&nonce_bytes); // 12
+    let mut bundle =
+        Vec::with_capacity(10 + 1 + SALT_LENGTH + 1 + 4 + nonce_bytes.len() + ciphertext.len());
+    bundle.extend_from_slice(PEERBAY_MAGIC);
+    bundle.push(CURRENT_CIPHER_VERSION);
+    bundle.extend_from_slice(&salt);
+    bundle.push(nonce_bytes.len() as u8);
+    bundle.extend_from_slice(&payload_len.to_le_bytes());
+    bundle.extend_from_slice(&nonce_bytes);
     bundle.extend_from_slice(&ciphertext);
-
-    // Compute MAC over bundle
-    let mac = compute_mac(&bundle, &mac_key);
-    bundle.extend_from_slice(&mac); // 32
     bundle
 }
 
-/// Verify header magic, version, lengths, MAC, then decrypt.
+/// Verify header magic, version, lengths, then decrypt with the GCM authentication tag.
 pub fn decrypt_custom(data: &[u8], seed: &str) -> Option<Vec<u8>> {
-    // Must have at least header + minimum payload + MAC
-    if data.len() < 10 + 1 + 4 + 12 + 32 {
+    let header_size = 10 + 1 + SALT_LENGTH + 1 + 4;
+    if data.len() < header_size + 12 {
         return None;
     }
-    // Magic check
     if &data[..10] != PEERBAY_MAGIC {
         return None;
     }
     let version = data[10];
     if version != CURRENT_CIPHER_VERSION {
-        return None; // Unknown version rejected
-    }
-    let nonce_len = data[11] as usize;
-    if nonce_len != 12 {
-        return None; // Unexpected nonce length
-    }
-    let payload_len = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
-
-    let header_size = 10 + 1 + 1 + 4; // magic + version + nonce_len + payload_len
-    let header_plus_nonce = header_size + nonce_len;
-    let mac_offset = header_plus_nonce + payload_len;
-
-    if data.len() != mac_offset + 32 {
         return None;
     }
-
-    // Split bundle and MAC
-    let bundle = &data[..mac_offset];
-    let mac_in = &data[mac_offset..mac_offset + 32];
-
-    // Verify MAC
-    let (aes_key, mac_key) = derive_cipher_keys(seed);
-    let mac_expected = compute_mac(bundle, &mac_key);
-    if mac_in != mac_expected.as_slice() {
-        return None; // Tampering detected
+    let salt = &data[11..11 + SALT_LENGTH];
+    let nonce_len = data[11 + SALT_LENGTH] as usize;
+    if nonce_len != 12 {
+        return None;
     }
-
-    // Extract nonce and ciphertext
-    let nonce =
-        Nonce::try_from(&bundle[header_size..header_size + nonce_len]).expect("valid nonce length");
-    let ciphertext = &bundle[header_size + nonce_len..mac_offset];
-
-    let key = aes_gcm::Key::<Aes256Gcm>::try_from(aes_key.as_slice()).expect("valid key length");
+    let payload_offset = 11 + SALT_LENGTH + 1;
+    let payload_len = u32::from_le_bytes([
+        data[payload_offset],
+        data[payload_offset + 1],
+        data[payload_offset + 2],
+        data[payload_offset + 3],
+    ]) as usize;
+    let nonce_offset = payload_offset + 4;
+    if data.len() != nonce_offset + nonce_len + payload_len {
+        return None;
+    }
+    let nonce = Nonce::try_from(&data[nonce_offset..nonce_offset + nonce_len]).ok()?;
+    let ciphertext = &data[nonce_offset + nonce_len..];
+    let key_bytes = derive_cipher_key(seed, salt);
+    let key = aes_gcm::Key::<Aes256Gcm>::try_from(key_bytes.as_slice()).expect("valid key length");
     let cipher = Aes256Gcm::new(&key);
     cipher.decrypt(&nonce, ciphertext).ok()
 }
