@@ -1,14 +1,19 @@
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 
 use crate::app::LifecycleState;
 use crate::discovery::DiscoveredPeer;
-use crate::identity::DeviceIdentity;
+use crate::identity::{DeviceIdentity, MAX_DEVICE_NAME_LENGTH, validate_display_name};
 use crate::protocol::CapabilityDocument;
 use crate::redaction::RedactionPolicy;
 use crate::session::SessionState;
 use crate::storage::PeerRecord;
 
 pub const VIEWMODEL_SCHEMA_VERSION: u16 = 1;
+pub const MAX_DEVICES: usize = 1024;
+pub const MAX_SESSIONS: usize = 64;
+pub const MAX_SNAPSHOT_BYTES: usize = 1_048_576;
+const MIN_EMIT_MS: u64 = 1_577_836_800_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AppViewModel {
@@ -140,6 +145,48 @@ pub struct SnapshotInputs<'a> {
     pub active_workers: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ViewModelError {
+    EmittedAtTooOld { value: u64 },
+    TooManyDevices { count: usize },
+    TooManySessions { count: usize },
+    SnapshotTooLarge { size: usize },
+    UnknownSessionPeer,
+    InvalidPeerField { field: &'static str },
+}
+
+impl Display for ViewModelError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmittedAtTooOld { value } => write!(
+                formatter,
+                "snapshot timestamp {value} is before the minimum accepted value"
+            ),
+            Self::TooManyDevices { count } => write!(
+                formatter,
+                "snapshot would contain {count} devices, limit is {MAX_DEVICES}"
+            ),
+            Self::TooManySessions { count } => write!(
+                formatter,
+                "snapshot would contain {count} sessions, limit is {MAX_SESSIONS}"
+            ),
+            Self::SnapshotTooLarge { size } => write!(
+                formatter,
+                "serialized snapshot is {size} bytes, limit is {MAX_SNAPSHOT_BYTES}"
+            ),
+            Self::UnknownSessionPeer => write!(
+                formatter,
+                "snapshot session references a device outside the device union"
+            ),
+            Self::InvalidPeerField { field } => {
+                write!(formatter, "peer field {field} failed validation")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ViewModelError {}
+
 struct DeviceSource<'a> {
     status: TrustStatus,
     display_name: String,
@@ -150,6 +197,12 @@ struct DeviceSource<'a> {
 
 impl AppViewModel {
     pub fn build(inputs: SnapshotInputs<'_>) -> eros::Result<Self> {
+        if inputs.now_ms < MIN_EMIT_MS {
+            return Err(eros::error!(ViewModelError::EmittedAtTooOld {
+                value: inputs.now_ms
+            }));
+        }
+
         let mut sources: BTreeMap<&str, DeviceSource<'_>> = BTreeMap::new();
 
         for record in inputs.trusted {
@@ -187,8 +240,25 @@ impl AppViewModel {
                 });
         }
 
+        if sources.len() > MAX_DEVICES {
+            return Err(eros::error!(ViewModelError::TooManyDevices {
+                count: sources.len()
+            }));
+        }
+        if inputs.sessions.len() > MAX_SESSIONS {
+            return Err(eros::error!(ViewModelError::TooManySessions {
+                count: inputs.sessions.len()
+            }));
+        }
+        for session in inputs.sessions {
+            if !sources.contains_key(session.device_id.as_str()) {
+                return Err(eros::error!(ViewModelError::UnknownSessionPeer));
+            }
+        }
+
         let mut devices = Vec::with_capacity(sources.len());
         for (device_id, source) in &sources {
+            validate_peer_strings(source)?;
             devices.push(device_view(device_id, source, inputs.sessions));
         }
 
@@ -212,7 +282,7 @@ impl AppViewModel {
             .filter(|record| !record.is_revoked())
             .count();
 
-        Ok(Self {
+        let snapshot = Self {
             schema_version: VIEWMODEL_SCHEMA_VERSION,
             emitted_at_ms: inputs.now_ms,
             app: AppStatusView {
@@ -238,7 +308,16 @@ impl AppViewModel {
                 trusted_count,
                 revoked_count: inputs.trusted.len() - trusted_count,
             },
-        })
+        };
+
+        let size = serde_json::to_vec(&snapshot).map_or_else(
+            |_| MAX_SNAPSHOT_BYTES.saturating_add(1),
+            |bytes| bytes.len(),
+        );
+        if size > MAX_SNAPSHOT_BYTES {
+            return Err(eros::error!(ViewModelError::SnapshotTooLarge { size }));
+        }
+        Ok(snapshot)
     }
 }
 
@@ -310,6 +389,45 @@ fn feature_rows_from_snapshot(snapshot: &str) -> Vec<FeatureRowView> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn validate_peer_strings(source: &DeviceSource<'_>) -> eros::Result<()> {
+    validate_display_name(&source.display_name).map_err(|_| {
+        eros::error!(ViewModelError::InvalidPeerField {
+            field: "display_name"
+        })
+    })?;
+    validate_platform_string(&source.platform)
+        .map_err(|_| eros::error!(ViewModelError::InvalidPeerField { field: "platform" }))?;
+    Ok(())
+}
+
+fn validate_platform_string(value: &str) -> eros::Result<()> {
+    if value.trim().is_empty()
+        || value != value.trim()
+        || value.chars().any(char::is_control)
+        || value.chars().any(is_disallowed_format_character)
+        || value
+            .chars()
+            .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
+        || value.len() > MAX_DEVICE_NAME_LENGTH
+    {
+        return Err(eros::error!(ViewModelError::InvalidPeerField {
+            field: "platform"
+        }));
+    }
+    Ok(())
+}
+
+fn is_disallowed_format_character(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}'
+    )
 }
 
 fn available_actions(status: TrustStatus, has_active_session: bool) -> Vec<DeviceActionView> {

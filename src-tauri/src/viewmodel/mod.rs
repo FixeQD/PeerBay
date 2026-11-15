@@ -4,8 +4,9 @@ pub mod snapshot;
 
 pub use snapshot::{
     AppStatusView, AppViewModel, DeviceAction, DeviceActionView, DeviceView,
-    DiagnosticsSummaryView, FeatureRowState, FeatureRowView, LocalIdentityView, SessionSummary,
-    SessionView, SnapshotInputs, TrustStatus, VIEWMODEL_SCHEMA_VERSION,
+    DiagnosticsSummaryView, FeatureRowState, FeatureRowView, LocalIdentityView, MAX_DEVICES,
+    MAX_SESSIONS, MAX_SNAPSHOT_BYTES, SessionSummary, SessionView, SnapshotInputs, TrustStatus,
+    VIEWMODEL_SCHEMA_VERSION, ViewModelError,
 };
 
 use crate::redaction::RedactionPolicy;

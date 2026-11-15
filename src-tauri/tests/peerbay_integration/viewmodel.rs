@@ -8,8 +8,9 @@ use peerbay_lib::protocol::CapabilityDocument;
 use peerbay_lib::session::SessionState;
 use peerbay_lib::storage::PeerRecord;
 use peerbay_lib::viewmodel::{
-    AppViewModel, DeviceAction, DeviceView, FeatureRowState, FeatureRowView, SessionSummary,
-    SnapshotInputs, TrustStatus, VIEWMODEL_SCHEMA_VERSION,
+    AppViewModel, DeviceAction, DeviceView, FeatureRowState, FeatureRowView, MAX_DEVICES,
+    MAX_SESSIONS, MAX_SNAPSHOT_BYTES, SessionSummary, SnapshotInputs, TrustStatus,
+    VIEWMODEL_SCHEMA_VERSION, ViewModelError,
 };
 
 const LOCAL_DEVICE_ID: &str = "33333333-3333-4333-8333-333333333333";
@@ -109,6 +110,37 @@ fn disabled_reason(device: &DeviceView, action: DeviceAction) -> Option<&str> {
         .iter()
         .find(|entry| entry.action == action)
         .and_then(|entry| entry.disabled_reason.as_deref())
+}
+
+fn viewmodel_error(result: eros::Result<AppViewModel>) -> ViewModelError {
+    result
+        .expect_err("snapshot build should fail")
+        .downcast_inner::<ViewModelError>()
+        .expect("viewmodel error should be preserved")
+}
+
+fn generated_device_id(index: usize) -> String {
+    format!("{:08x}-0000-4000-8000-{:012x}", 0x1000 + index, index + 1)
+}
+
+fn bulky_capabilities_snapshot() -> String {
+    let features: Vec<String> = (0..64).map(|index| format!("feature-{index:02}")).collect();
+    let document = CapabilityDocument::new(
+        "linux",
+        "6.1",
+        vec![1],
+        vec!["tcp".to_string()],
+        features,
+        Vec::new(),
+        1_048_576,
+        65_536,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .unwrap();
+    serde_json::to_string(&document).unwrap()
 }
 
 #[test]
@@ -344,6 +376,170 @@ fn actions_follow_trust_and_session_state() {
     );
     assert_eq!(device.connection_state, "offline");
     assert_eq!(device.transport_label, None);
+}
+
+#[test]
+fn session_referential_integrity_is_enforced() {
+    let identity = local_identity();
+    let capabilities = local_capabilities();
+    let trusted = vec![trusted_record(PEER_DEVICE_ID, "Phone Alpha")];
+    let sessions = vec![session_summary(
+        "session-1",
+        "99999999-9999-4999-8999-999999999999",
+        SessionState::Connected,
+    )];
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &trusted,
+        &sessions,
+    )));
+    assert_eq!(error, ViewModelError::UnknownSessionPeer);
+
+    let mut revoked = trusted_record(PEER_DEVICE_ID, "Phone Alpha");
+    revoked.revoke(SNAPSHOT_NOW_MS - 1_000);
+    let revoked_trusted = vec![revoked];
+    let sessions = vec![session_summary(
+        "session-1",
+        PEER_DEVICE_ID,
+        SessionState::Connected,
+    )];
+    let snapshot = AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &revoked_trusted,
+        &sessions,
+    ))
+    .unwrap();
+    let device = &snapshot.devices[0];
+    assert_eq!(device.trust, TrustStatus::Revoked);
+    assert_eq!(device.connection_state, "connected");
+    assert!(device.available_actions.iter().all(|entry| !entry.enabled));
+}
+
+#[test]
+fn peer_strings_are_validated_at_emission() {
+    let identity = local_identity();
+    let capabilities = local_capabilities();
+
+    let mut control_name = trusted_record(PEER_DEVICE_ID, "Phone Alpha");
+    control_name.display_name = "Phone\u{0007}Alpha".to_owned();
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        std::slice::from_ref(&control_name),
+        &[],
+    )));
+    assert_eq!(
+        error,
+        ViewModelError::InvalidPeerField {
+            field: "display_name"
+        }
+    );
+    assert!(!error.to_string().contains("Phone"));
+
+    let mut unicode_name = trusted_record(PEER_DEVICE_ID, "Phone Alpha");
+    unicode_name.display_name = "Telefon Zażółć Gęślą Jaźń".to_owned();
+    let snapshot = AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        std::slice::from_ref(&unicode_name),
+        &[],
+    ))
+    .unwrap();
+    assert_eq!(
+        snapshot.devices[0].display_name,
+        "Telefon Zażółć Gęślą Jaźń"
+    );
+
+    let mut control_platform = trusted_record(PEER_DEVICE_ID, "Phone Alpha");
+    control_platform.platform = "android\u{0000}".to_owned();
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        std::slice::from_ref(&control_platform),
+        &[],
+    )));
+    assert_eq!(
+        error,
+        ViewModelError::InvalidPeerField { field: "platform" }
+    );
+}
+
+#[test]
+fn oversized_inputs_fail_closed() {
+    let identity = local_identity();
+    let capabilities = local_capabilities();
+    let discovered: Vec<DiscoveredPeer> = (0..MAX_DEVICES + 1)
+        .map(|index| discovered_peer(&generated_device_id(index)))
+        .collect();
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &discovered,
+        &[],
+        &[],
+    )));
+    assert_eq!(
+        error,
+        ViewModelError::TooManyDevices {
+            count: MAX_DEVICES + 1
+        }
+    );
+
+    let trusted = vec![trusted_record(PEER_DEVICE_ID, "Phone Alpha")];
+    let sessions: Vec<SessionSummary> = (0..MAX_SESSIONS + 1)
+        .map(|index| {
+            session_summary(
+                &format!("session-{index:04}"),
+                PEER_DEVICE_ID,
+                SessionState::Connected,
+            )
+        })
+        .collect();
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &trusted,
+        &sessions,
+    )));
+    assert_eq!(
+        error,
+        ViewModelError::TooManySessions {
+            count: MAX_SESSIONS + 1
+        }
+    );
+}
+
+#[test]
+fn giant_serialized_snapshot_is_rejected() {
+    let identity = local_identity();
+    let capabilities = local_capabilities();
+    let snapshot_json = bulky_capabilities_snapshot();
+    let trusted: Vec<PeerRecord> = (0..MAX_DEVICES)
+        .map(|index| {
+            let mut record = trusted_record(&generated_device_id(index), &"n".repeat(128));
+            record.capabilities_snapshot = snapshot_json.clone();
+            record
+        })
+        .collect();
+    let error = viewmodel_error(AppViewModel::build(snapshot_inputs(
+        &identity,
+        &capabilities,
+        &[],
+        &trusted,
+        &[],
+    )));
+    let ViewModelError::SnapshotTooLarge { size } = error else {
+        panic!("expected SnapshotTooLarge error");
+    };
+    assert!(size > MAX_SNAPSHOT_BYTES);
 }
 
 #[test]
