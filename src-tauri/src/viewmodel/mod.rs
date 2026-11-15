@@ -1,5 +1,13 @@
 //! Projections of Rust application state for the WebView.
 
+pub mod snapshot;
+
+pub use snapshot::{
+    AppStatusView, AppViewModel, DeviceAction, DeviceActionView, DeviceView,
+    DiagnosticsSummaryView, FeatureRowState, FeatureRowView, LocalIdentityView, SessionSummary,
+    SessionView, SnapshotInputs, TrustStatus, VIEWMODEL_SCHEMA_VERSION,
+};
+
 use crate::redaction::RedactionPolicy;
 
 #[allow(dead_code)]
