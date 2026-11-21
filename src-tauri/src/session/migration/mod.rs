@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use proto::{ChannelResumeCursor, ResumeRejectionReason, SessionChannel};
+
 use transport::{ChannelKind, TransportKind};
 
 use super::state::{InvalidSessionTransition, SessionState};

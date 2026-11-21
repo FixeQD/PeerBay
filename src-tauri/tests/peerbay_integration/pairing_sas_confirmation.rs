@@ -1,9 +1,9 @@
 //! SAS confirmation flow tests
 
+use peerbay_lib::messages::PairingConfirm;
 use peerbay_lib::pairing::{
     PairingExchange, PairingExchangeError, PairingExchangeState, PairingSession, SAS_CODE_LENGTH,
 };
-use proto::pairing::PairingConfirm;
 use std::time::Duration;
 
 const INITIATOR_FINGERPRINT: &str =

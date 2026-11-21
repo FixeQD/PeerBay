@@ -14,10 +14,9 @@ use peerbay_lib::viewmodel::{
     PhoneScreenMode, PolicyCommand, ScreenCommand, SessionCommand, SessionSummary, SnapshotInputs,
     TrustStatus, UiCommand, VIEWMODEL_SCHEMA_VERSION, ViewModelError, ViewModelErrorCode,
 };
-use proto::{
-    CapabilityDocument, FeaturePolicy, PolicyError, PrivilegeProvider, ProtocolLimitError,
-    UserPolicyState,
-};
+use proto::{CapabilityDocument, ProtocolLimitError};
+
+use peerbay_lib::messages::{FeaturePolicy, PolicyError, PrivilegeProvider, UserPolicyState};
 
 const LOCAL_DEVICE_ID: &str = "33333333-3333-4333-8333-333333333333";
 const PEER_DEVICE_ID: &str = "11111111-1111-4111-8111-111111111111";

@@ -4,9 +4,9 @@ use super::trust::SESSION_TOKEN_LIFETIME_MS;
 use super::trust::*;
 use super::types::*;
 use super::validation::*;
+use crate::messages::{PairingAccepted, PairingCode, PairingConfirm};
 use crate::pairing::PairingExchangeError;
 use crate::storage::PeerTrustStore;
-use proto::pairing::{PairingAccepted, PairingCode, PairingConfirm};
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
@@ -78,7 +78,7 @@ impl PairingExchange {
     /// Records the expiry of an issued pairing code propagated to this peer
     pub fn apply_pairing_code(
         &mut self,
-        code: &proto::pairing::PairingCode,
+        code: &crate::messages::PairingCode,
     ) -> Result<(), PairingExchangeError> {
         if code.pairing_id != self.pairing_id {
             return Err(PairingExchangeError::InvalidPairingId);

@@ -3,6 +3,7 @@ mod commands;
 pub mod discovery;
 mod events;
 mod features;
+pub mod messages;
 pub mod pairing;
 pub mod platform;
 pub mod redaction;

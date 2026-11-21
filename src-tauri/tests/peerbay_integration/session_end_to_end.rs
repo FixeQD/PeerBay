@@ -7,6 +7,8 @@ use serde::de::DeserializeOwned;
 
 use identity::TransportCertificate;
 use peerbay_lib::discovery::DiscoveryRegistry;
+use peerbay_lib::messages::AppChannel;
+use peerbay_lib::messages::{PairingAccepted, PairingConfirm};
 use peerbay_lib::pairing::{PairingExchange, PairingExchangeState, PairingManager};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, DisconnectTrigger, LivenessStatus, MigrationConfig, MigrationPlan,
@@ -14,12 +16,12 @@ use peerbay_lib::session::{
     SessionResumeOutcome, SessionState, TransportMigrationInitiator, TransportMigrationResponder,
 };
 use peerbay_lib::storage::PeerTrustStore;
-use proto::pairing::{PairingAccepted, PairingConfirm};
 use proto::{
-    ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope, MessageType,
-    PROTOCOL_VERSION, PingBody, PongBody, ResumeKey, ResumeRejectionReason, SequenceError,
-    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
+    ChannelResumeCursor, ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION,
+    PingBody, PongBody, ResumeKey, ResumeRejectionReason, SequenceError, SessionChannel,
+    SessionResumeAccepted, SessionResumeRequest,
 };
+
 use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, TcpTransport, TlsTransport, Transport,
     TransportChannel, TransportKind,
@@ -426,9 +428,7 @@ fn plan_for(
 fn control_cursors(session: &PeerSession) -> Vec<ChannelResumeCursor> {
     vec![control_cursor(
         session.last_sent_seq().unwrap_or(0),
-        session
-            .last_received_seq(MessageChannel::Control)
-            .unwrap_or(0),
+        session.last_received_seq(AppChannel::Control).unwrap_or(0),
     )]
 }
 

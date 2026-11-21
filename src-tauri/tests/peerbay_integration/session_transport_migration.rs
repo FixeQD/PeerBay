@@ -10,6 +10,7 @@ use proto::{
     ChannelMigration, ChannelResumeCursor, ResumeKey, ResumeRejectionReason, SessionChannel,
     SessionResumeRequest,
 };
+
 use transport::{ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind};
 
 use peerbay_lib::session::SessionState;

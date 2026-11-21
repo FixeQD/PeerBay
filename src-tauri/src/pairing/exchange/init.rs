@@ -2,12 +2,11 @@ use super::PairingExchange;
 use super::crypto::*;
 use super::types::*;
 use super::validation::*;
+use crate::messages::{PairingCommit, PairingStart};
 use crate::pairing::PairingExchangeError;
-use proto::pairing::{PairingCommit, PairingStart};
 
-use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 impl PairingExchange {
     pub fn as_initiator(

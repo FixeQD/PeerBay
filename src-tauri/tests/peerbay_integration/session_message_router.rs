@@ -2,21 +2,23 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
+use peerbay_lib::messages::AppChannel;
+use peerbay_lib::messages::{
+    ClipboardMessageType, FileMessageType, InputMessageType, MediaMessageType, PairingMessageType,
+    PhoneMessageType,
+};
 use peerbay_lib::session::{
     RouteDisposition, RoutedMessage, SessionError, SessionMessageHandler, SessionRouter,
 };
-use proto::{
-    ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
-    MessageChannel, MessageEnvelope, MessageType, PairingMessageType, PhoneMessageType,
-};
+use proto::{ControlMessageType, MessageEnvelope, MessageType};
 
 struct RecordingHandler {
-    domain: MessageChannel,
+    domain: AppChannel,
     seen: Mutex<Vec<(String, u64, String)>>,
 }
 
 impl RecordingHandler {
-    fn new(domain: MessageChannel) -> Self {
+    fn new(domain: AppChannel) -> Self {
         Self {
             domain,
             seen: Mutex::new(Vec::new()),
@@ -29,7 +31,7 @@ impl RecordingHandler {
 }
 
 impl SessionMessageHandler for RecordingHandler {
-    fn domain(&self) -> MessageChannel {
+    fn domain(&self) -> AppChannel {
         self.domain
     }
 
@@ -54,17 +56,17 @@ fn envelope(message_type: MessageType, seq: u64) -> MessageEnvelope<Value> {
     )
 }
 
-fn router_with_all_domains() -> (SessionRouter, Vec<(MessageChannel, Arc<RecordingHandler>)>) {
+fn router_with_all_domains() -> (SessionRouter, Vec<(AppChannel, Arc<RecordingHandler>)>) {
     let mut router = SessionRouter::new();
     let mut handlers = Vec::new();
     for domain in [
-        MessageChannel::Control,
-        MessageChannel::Pairing,
-        MessageChannel::Clipboard,
-        MessageChannel::Files,
-        MessageChannel::Input,
-        MessageChannel::Media,
-        MessageChannel::Phone,
+        AppChannel::Control,
+        AppChannel::Pairing,
+        AppChannel::Clipboard,
+        AppChannel::Files,
+        AppChannel::Input,
+        AppChannel::Media,
+        AppChannel::Phone,
     ] {
         let handler = Arc::new(RecordingHandler::new(domain));
         router
@@ -78,17 +80,14 @@ fn router_with_all_domains() -> (SessionRouter, Vec<(MessageChannel, Arc<Recordi
 #[test]
 fn routes_control_messages_to_control_handler() {
     let mut router = SessionRouter::new();
-    let handler = Arc::new(RecordingHandler::new(MessageChannel::Control));
+    let handler = Arc::new(RecordingHandler::new(AppChannel::Control));
     router.register(handler.clone()).expect("register");
 
     let disposition = router
         .route(&envelope(MessageType::Control(ControlMessageType::Ping), 1))
         .expect("route");
 
-    assert_eq!(
-        disposition,
-        RouteDisposition::Handled(MessageChannel::Control)
-    );
+    assert_eq!(disposition, RouteDisposition::Handled(AppChannel::Control));
     assert_eq!(handler.seen(), vec![("msg-1".into(), 1, "ping".into())]);
 }
 
@@ -99,37 +98,37 @@ fn routes_feature_messages_to_their_domain_handlers() {
     let cases = [
         (
             MessageType::Control(ControlMessageType::Hello),
-            MessageChannel::Control,
+            AppChannel::Control,
             "hello",
         ),
         (
-            MessageType::Pairing(PairingMessageType::Start),
-            MessageChannel::Pairing,
+            MessageType::from(PairingMessageType::Start),
+            AppChannel::Pairing,
             "pair.start",
         ),
         (
-            MessageType::Clipboard(ClipboardMessageType::Offer),
-            MessageChannel::Clipboard,
+            MessageType::from(ClipboardMessageType::Offer),
+            AppChannel::Clipboard,
             "clipboard.offer",
         ),
         (
-            MessageType::Files(FileMessageType::Offer),
-            MessageChannel::Files,
+            MessageType::from(FileMessageType::Offer),
+            AppChannel::Files,
             "file.offer",
         ),
         (
-            MessageType::Input(InputMessageType::Move),
-            MessageChannel::Input,
+            MessageType::from(InputMessageType::Move),
+            AppChannel::Input,
             "input.move",
         ),
         (
-            MessageType::Media(MediaMessageType::ScreenOffer),
-            MessageChannel::Media,
+            MessageType::from(MediaMessageType::ScreenOffer),
+            AppChannel::Media,
             "screen.offer",
         ),
         (
-            MessageType::Phone(PhoneMessageType::PrivilegeState),
-            MessageChannel::Phone,
+            MessageType::from(PhoneMessageType::PrivilegeState),
+            AppChannel::Phone,
             "phone.privilege.state",
         ),
     ];
@@ -151,7 +150,7 @@ fn routes_feature_messages_to_their_domain_handlers() {
 fn ignores_unknown_message_types_without_failing_the_session() {
     let mut router = SessionRouter::new();
     router
-        .register(Arc::new(RecordingHandler::new(MessageChannel::Control)))
+        .register(Arc::new(RecordingHandler::new(AppChannel::Control)))
         .expect("register");
 
     let disposition = router
@@ -173,7 +172,7 @@ fn reports_unhandled_domains_without_panicking() {
 
     assert_eq!(
         disposition,
-        RouteDisposition::Unhandled(MessageChannel::Control)
+        RouteDisposition::Unhandled(AppChannel::Control)
     );
 }
 
@@ -181,10 +180,10 @@ fn reports_unhandled_domains_without_panicking() {
 fn rejects_duplicate_domain_registration() {
     let mut router = SessionRouter::new();
     router
-        .register(Arc::new(RecordingHandler::new(MessageChannel::Control)))
+        .register(Arc::new(RecordingHandler::new(AppChannel::Control)))
         .expect("first register");
     let error = router
-        .register(Arc::new(RecordingHandler::new(MessageChannel::Control)))
+        .register(Arc::new(RecordingHandler::new(AppChannel::Control)))
         .expect_err("duplicate registration should fail");
 
     let inner = error
@@ -193,7 +192,7 @@ fn rejects_duplicate_domain_registration() {
     assert!(matches!(
         inner,
         SessionError::HandlerAlreadyRegistered {
-            domain: MessageChannel::Control
+            domain: AppChannel::Control
         }
     ));
 }

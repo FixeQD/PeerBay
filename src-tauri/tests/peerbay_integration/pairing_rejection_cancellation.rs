@@ -1,9 +1,9 @@
 //! Tests for rejection, cancellation, expiry and nonce cleanup in pairing
 
+use peerbay_lib::messages::PairingConfirm;
 use peerbay_lib::pairing::{
     PairingExchange, PairingExchangeError, PairingExchangeState, PairingSession,
 };
-use proto::pairing::PairingConfirm;
 use std::time::Duration;
 
 const INITIATOR_FP: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

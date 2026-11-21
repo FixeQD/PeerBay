@@ -8,6 +8,7 @@ use proto::{
     ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION, PingBody, PongBody,
     SequenceError,
 };
+
 use transport::{ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind};
 
 const SESSION_ID: &str = "session-peer-session-0001";

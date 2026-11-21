@@ -1,14 +1,12 @@
 use serde_json::json;
 
-use proto::{
-    ClipboardMessageType, ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION,
-};
+use proto::{ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION};
 
 #[test]
 fn envelope_serializes_the_versioned_wire_fields() {
     let envelope = MessageEnvelope::new(
         "message-uuid",
-        MessageType::Clipboard(ClipboardMessageType::Text),
+        MessageType::Unknown("clipboard.text".to_owned()),
         "session-id",
         42,
         1_792_700_000_000,

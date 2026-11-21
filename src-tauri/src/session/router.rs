@@ -3,18 +3,19 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use proto::{MessageChannel, MessageEnvelope, MessageType, ProtocolLimits};
+use crate::messages::{AppChannel, AppMessageType};
+use proto::{MessageEnvelope, MessageType, ProtocolLimits};
 
 use super::SessionError;
 
 struct RegisteredHandler {
-    domain: MessageChannel,
+    domain: AppChannel,
     handler: Arc<dyn SessionMessageHandler>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RoutedMessage {
-    pub domain: MessageChannel,
+    pub domain: AppChannel,
     pub message_type: MessageType,
     pub session_id: String,
     pub message_id: String,
@@ -24,7 +25,14 @@ pub struct RoutedMessage {
 impl RoutedMessage {
     pub fn from_envelope(envelope: &MessageEnvelope<Value>) -> Self {
         Self {
-            domain: envelope.message_type.channel(),
+            domain: match &envelope.message_type {
+                MessageType::Control(_) => AppChannel::Control,
+                MessageType::Unknown(_) => {
+                    AppMessageType::from_wire(envelope.message_type.as_str())
+                        .map(AppMessageType::channel)
+                        .unwrap_or(AppChannel::Unknown)
+                }
+            },
             message_type: envelope.message_type.clone(),
             session_id: envelope.session_id.clone(),
             message_id: envelope.id.clone(),
@@ -35,19 +43,19 @@ impl RoutedMessage {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RouteDisposition {
-    Handled(MessageChannel),
+    Handled(AppChannel),
     IgnoredUnknown,
-    Unhandled(MessageChannel),
+    Unhandled(AppChannel),
 }
 
 pub trait SessionMessageHandler: Send + Sync {
-    fn domain(&self) -> MessageChannel;
+    fn domain(&self) -> AppChannel;
     fn handle(&self, message: &RoutedMessage, body: &Value) -> eros::Result<()>;
 }
 
 #[derive(Default)]
 pub struct SessionRouter {
-    handlers: HashMap<MessageChannel, RegisteredHandler>,
+    handlers: HashMap<AppChannel, RegisteredHandler>,
 }
 
 impl SessionRouter {
@@ -57,7 +65,7 @@ impl SessionRouter {
 
     pub fn register(&mut self, handler: Arc<dyn SessionMessageHandler>) -> eros::Result<()> {
         let domain = handler.domain();
-        if domain == MessageChannel::Unknown {
+        if domain == AppChannel::Unknown {
             return Err(eros::error!(SessionError::UnsupportedDomain { domain })
                 .context("register session message handler"));
         }
@@ -76,7 +84,7 @@ impl SessionRouter {
 
     pub fn replace(&mut self, handler: Arc<dyn SessionMessageHandler>) {
         let domain = handler.domain();
-        if domain == MessageChannel::Unknown {
+        if domain == AppChannel::Unknown {
             return;
         }
 
@@ -89,7 +97,7 @@ impl SessionRouter {
 
         let message = RoutedMessage::from_envelope(envelope);
 
-        if message.domain == MessageChannel::Unknown {
+        if message.domain == AppChannel::Unknown {
             return Ok(RouteDisposition::IgnoredUnknown);
         }
 
@@ -112,7 +120,7 @@ impl SessionRouter {
         Ok(RouteDisposition::Handled(message.domain))
     }
 
-    pub fn has_handler(&self, domain: MessageChannel) -> bool {
+    pub fn has_handler(&self, domain: AppChannel) -> bool {
         self.handlers.contains_key(&domain)
     }
 }

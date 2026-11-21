@@ -9,6 +9,7 @@ use peerbay_lib::session::{
     TransportMigrationResponder,
 };
 use proto::{ChannelResumeCursor, ResumeKey, SessionChannel};
+
 use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport, TransportChannel, TransportKind,
     TransportMetrics,

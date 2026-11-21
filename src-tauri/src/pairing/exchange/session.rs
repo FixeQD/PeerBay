@@ -1,10 +1,10 @@
 use super::PairingExchange;
 use super::*;
-use crate::pairing::PairingExchangeError;
-use proto::pairing::{
+use crate::messages::{
     PairingCode, PairingCommit, PairingConfirm, PairingNonce as ProtocolNonce, PairingReveal,
     PairingStart,
 };
+use crate::pairing::PairingExchangeError;
 
 use std::sync::{Arc, Mutex};
 
@@ -113,7 +113,7 @@ impl PairingSession {
 
     pub fn apply_pairing_code(
         &self,
-        code: &proto::pairing::PairingCode,
+        code: &crate::messages::PairingCode,
     ) -> Result<(), PairingExchangeError> {
         self.inner
             .lock()
@@ -138,7 +138,7 @@ impl PairingSession {
         trust_store: &crate::storage::PeerTrustStore,
         display_name: impl Into<String>,
         platform: impl Into<String>,
-    ) -> Result<proto::pairing::PairingAccepted, PairingExchangeError> {
+    ) -> Result<crate::messages::PairingAccepted, PairingExchangeError> {
         let mut guard = self
             .inner
             .lock()
@@ -151,7 +151,7 @@ impl PairingSession {
         &mut self,
         trust_store: &crate::storage::PeerTrustStore,
         peer_device_id: impl Into<String>,
-        accepted: &proto::pairing::PairingAccepted,
+        accepted: &crate::messages::PairingAccepted,
         display_name: impl Into<String>,
         platform: impl Into<String>,
     ) -> Result<(), PairingExchangeError> {

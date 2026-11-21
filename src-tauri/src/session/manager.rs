@@ -6,10 +6,12 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use zeroize::Zeroizing;
 
+use crate::messages::AppChannel;
 use proto::{
-    ControlMessageType, MessageChannel, MessageEnvelope, MessageType, PingBody, PongBody,
-    ProtocolLimits, SequenceTracker,
+    ControlMessageType, MessageEnvelope, MessageType, PingBody, PongBody, ProtocolLimits,
+    SequenceTracker,
 };
+
 use transport::{Transport, TransportChannel};
 
 use super::errors::SessionError;
@@ -119,11 +121,19 @@ impl PeerSession {
 
         let envelope: MessageEnvelope<T> = serde_json::from_slice(&payload)
             .map_err(|error| eros::error!(error).context("decode session envelope"))?;
+        let channel = match &envelope.message_type {
+            MessageType::Control(_) => AppChannel::Control,
+            MessageType::Unknown(_) => {
+                crate::messages::AppMessageType::from_wire(envelope.message_type.as_str())
+                    .map(crate::messages::AppMessageType::channel)
+                    .unwrap_or(AppChannel::Unknown)
+            }
+        };
         ProtocolLimits::default()
             .validate_envelope(&envelope)
             .map_err(|error| error.context("validate session envelope"))?;
         self.tracker
-            .accept(&envelope)
+            .accept(&envelope, channel)
             .map_err(|error| error.context("accept session envelope"))?;
         Ok(Some(envelope))
     }
@@ -187,7 +197,7 @@ impl PeerSession {
         self.next_seq.checked_sub(1)
     }
 
-    pub fn last_received_seq(&self, channel: MessageChannel) -> Option<u64> {
+    pub fn last_received_seq(&self, channel: AppChannel) -> Option<u64> {
         self.tracker.last_accepted(channel)
     }
 

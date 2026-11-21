@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use peerbay_lib::messages::AppChannel;
 use peerbay_lib::session::{
     ChannelSeqSnapshot, MigrationConfig, MigrationRouteState, ReconnectBackoff,
     ReconnectBackoffConfig, ReconnectDecision, ResumeKeyStore, RouteDisposition, RoutedMessage,
@@ -9,10 +10,11 @@ use peerbay_lib::session::{
 };
 use peerbay_lib::storage::{PeerRecord, PeerTrustStore};
 use proto::{
-    ChannelMigration, ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope,
-    MessageType, ResumeKey, SequenceError, SequenceTracker, SessionChannel, SessionResumeAccepted,
+    ChannelMigration, ChannelResumeCursor, ControlMessageType, MessageEnvelope, MessageType,
+    ResumeKey, SequenceError, SequenceTracker, SessionChannel, SessionResumeAccepted,
     SessionResumeRequest,
 };
+
 use serde_json::{Value, json};
 
 const SESSION_ID: &str = "session-reconnect-idem-0001";
@@ -37,17 +39,17 @@ fn deliver(
     router: &SessionRouter,
     envelope: &MessageEnvelope<Value>,
 ) -> eros::Result<RouteDisposition> {
-    tracker.accept(envelope)?;
+    tracker.accept(envelope, AppChannel::Control)?;
     router.route(envelope)
 }
 
 struct CountingHandler {
-    domain: MessageChannel,
+    domain: AppChannel,
     seen: Mutex<Vec<u64>>,
 }
 
 impl CountingHandler {
-    fn new(domain: MessageChannel) -> Self {
+    fn new(domain: AppChannel) -> Self {
         Self {
             domain,
             seen: Mutex::new(Vec::new()),
@@ -64,7 +66,7 @@ impl CountingHandler {
 }
 
 impl SessionMessageHandler for CountingHandler {
-    fn domain(&self) -> MessageChannel {
+    fn domain(&self) -> AppChannel {
         self.domain
     }
 
@@ -127,7 +129,7 @@ fn resumed_responder(
 fn accepted_control_sequences(tracker: &mut SequenceTracker, high: u64) {
     for seq in 0..=high {
         tracker
-            .accept(&control_envelope(SESSION_ID, seq))
+            .accept(&control_envelope(SESSION_ID, seq), AppChannel::Control)
             .expect("pre-disconnect delivery should be accepted");
     }
 }
@@ -137,7 +139,7 @@ fn resume_keeps_tracker_continuity_and_rejects_redelivery() {
     let mut receiver = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     accepted_control_sequences(&mut receiver, 9);
     let local_watermark = receiver
-        .last_accepted(MessageChannel::Control)
+        .last_accepted(AppChannel::Control)
         .expect("delivered sequences leave a local watermark");
 
     let peer_cursor = ChannelResumeCursor::new(SessionChannel::Control, 0, 3);
@@ -165,40 +167,40 @@ fn resume_keeps_tracker_continuity_and_rejects_redelivery() {
     );
     let mut resumed = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     resumed
-        .restore(MessageChannel::Control, local_watermark)
+        .restore(AppChannel::Control, local_watermark)
         .expect("the local watermark should restore into the resumed tracker");
 
     // Redelivered frames execute nothing a second time...
     let duplicate = resumed
-        .accept(&control_envelope(SESSION_ID, 9))
+        .accept(&control_envelope(SESSION_ID, 9), AppChannel::Control)
         .expect_err("the watermark frame must not be delivered twice")
         .downcast_inner::<SequenceError>()
         .expect("duplicate error should be preserved");
     assert_eq!(
         duplicate,
         SequenceError::Duplicate {
-            channel: MessageChannel::Control,
+            channel: AppChannel::Control.into(),
             seq: 9,
         }
     );
     let replay = resumed
-        .accept(&control_envelope(SESSION_ID, 5))
+        .accept(&control_envelope(SESSION_ID, 5), AppChannel::Control)
         .expect_err("frames below the watermark stay replays after a resume")
         .downcast_inner::<SequenceError>()
         .expect("replay error should be preserved");
     assert_eq!(
         replay,
         SequenceError::Replay {
-            channel: MessageChannel::Control,
+            channel: AppChannel::Control.into(),
             seq: 5,
             last_accepted: 9,
         }
     );
 
     resumed
-        .accept(&control_envelope(SESSION_ID, 10))
+        .accept(&control_envelope(SESSION_ID, 10), AppChannel::Control)
         .expect("the next sequence should be accepted after the resume");
-    assert_eq!(resumed.last_accepted(MessageChannel::Control), Some(10));
+    assert_eq!(resumed.last_accepted(AppChannel::Control), Some(10));
 }
 
 #[test]
@@ -206,57 +208,57 @@ fn restored_tracker_after_receiver_restart_rejects_redelivery() {
     let mut receiver = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     accepted_control_sequences(&mut receiver, 9);
     let local_watermark = receiver
-        .last_accepted(MessageChannel::Control)
+        .last_accepted(AppChannel::Control)
         .expect("delivered sequences leave a local watermark");
 
     let mut restored = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     assert_eq!(
-        restored.last_accepted(MessageChannel::Control),
+        restored.last_accepted(AppChannel::Control),
         None,
         "a restarted tracker starts empty"
     );
     restored
-        .restore(MessageChannel::Control, local_watermark)
+        .restore(AppChannel::Control, local_watermark)
         .expect("the local watermark should restore");
-    assert_eq!(restored.last_accepted(MessageChannel::Control), Some(9));
+    assert_eq!(restored.last_accepted(AppChannel::Control), Some(9));
 
     let duplicate = restored
-        .accept(&control_envelope(SESSION_ID, 9))
+        .accept(&control_envelope(SESSION_ID, 9), AppChannel::Control)
         .expect_err("a restored watermark must reject its own frame")
         .downcast_inner::<SequenceError>()
         .expect("duplicate error should be preserved");
     assert_eq!(
         duplicate,
         SequenceError::Duplicate {
-            channel: MessageChannel::Control,
+            channel: AppChannel::Control.into(),
             seq: 9,
         }
     );
 
     let stale_cursor_claim = 3;
     let regression = restored
-        .restore(MessageChannel::Control, stale_cursor_claim)
+        .restore(AppChannel::Control, stale_cursor_claim)
         .expect_err("a stale peer cursor must not regress the watermark")
         .downcast_inner::<SequenceError>()
         .expect("restore regression error should be preserved");
     assert_eq!(
         regression,
         SequenceError::RestoreRegression {
-            channel: MessageChannel::Control,
+            channel: AppChannel::Control.into(),
             requested: 3,
             current: 9,
         }
     );
     assert_eq!(
-        restored.last_accepted(MessageChannel::Control),
+        restored.last_accepted(AppChannel::Control),
         Some(9),
         "a refused restore keeps the local watermark"
     );
 
     restored
-        .accept(&control_envelope(SESSION_ID, 10))
+        .accept(&control_envelope(SESSION_ID, 10), AppChannel::Control)
         .expect("the next sequence should be accepted after the refused restore");
-    assert_eq!(restored.last_accepted(MessageChannel::Control), Some(10));
+    assert_eq!(restored.last_accepted(AppChannel::Control), Some(10));
 }
 
 #[test]
@@ -280,25 +282,22 @@ fn duplicate_on_fallback_and_primary_channels_executes_once() {
     let mut tracker = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     accepted_control_sequences(&mut tracker, 9);
     let local_watermark = tracker
-        .last_accepted(MessageChannel::Control)
+        .last_accepted(AppChannel::Control)
         .expect("delivered sequences leave a local watermark");
     let mut resumed = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     resumed
-        .restore(MessageChannel::Control, local_watermark)
+        .restore(AppChannel::Control, local_watermark)
         .expect("the local watermark should restore");
 
     let mut router = SessionRouter::new();
-    let handler = Arc::new(CountingHandler::new(MessageChannel::Control));
+    let handler = Arc::new(CountingHandler::new(AppChannel::Control));
     router
         .register(handler.clone())
         .expect("the control handler should register");
 
     let disposition = deliver(&mut resumed, &router, &control_envelope(SESSION_ID, 10))
         .expect("the first delivery should execute");
-    assert_eq!(
-        disposition,
-        RouteDisposition::Handled(MessageChannel::Control)
-    );
+    assert_eq!(disposition, RouteDisposition::Handled(AppChannel::Control));
     assert_eq!(handler.sequences(), vec![10]);
 
     let error = deliver(&mut resumed, &router, &control_envelope(SESSION_ID, 10))
@@ -308,7 +307,7 @@ fn duplicate_on_fallback_and_primary_channels_executes_once() {
     assert_eq!(
         error,
         SequenceError::Duplicate {
-            channel: MessageChannel::Control,
+            channel: AppChannel::Control.into(),
             seq: 10,
         }
     );
@@ -323,7 +322,7 @@ fn duplicate_on_fallback_and_primary_channels_executes_once() {
 fn fresh_reconnect_rejects_old_session_messages() {
     let mut fresh = SequenceTracker::new(OTHER_SESSION_ID).expect("tracker should be created");
     let mut router = SessionRouter::new();
-    let handler = Arc::new(CountingHandler::new(MessageChannel::Control));
+    let handler = Arc::new(CountingHandler::new(AppChannel::Control));
     router
         .register(handler.clone())
         .expect("the control handler should register");
@@ -346,19 +345,19 @@ fn fresh_reconnect_rejects_old_session_messages() {
         "old-session frames must not reach any handler"
     );
     assert_eq!(
-        fresh.last_accepted(MessageChannel::Control),
+        fresh.last_accepted(AppChannel::Control),
         None,
         "old-session frames must not create tracker state"
     );
 
     fresh
-        .restore(MessageChannel::Control, 9)
+        .restore(AppChannel::Control, 9)
         .expect("the local watermark should restore");
     let fresh_delivery = deliver(&mut fresh, &router, &control_envelope(OTHER_SESSION_ID, 10))
         .expect("a fresh-session delivery should execute");
     assert_eq!(
         fresh_delivery,
-        RouteDisposition::Handled(MessageChannel::Control)
+        RouteDisposition::Handled(AppChannel::Control)
     );
     let late_stale = control_envelope(SESSION_ID, 11);
     let error = deliver(&mut fresh, &router, &late_stale)
@@ -520,21 +519,21 @@ fn peer_policy_survives_reconnect_cycle() {
 
     let mut tracker = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     let mut router = SessionRouter::new();
-    let handler = Arc::new(CountingHandler::new(MessageChannel::Control));
+    let handler = Arc::new(CountingHandler::new(AppChannel::Control));
     router
         .register(handler.clone())
         .expect("the control handler should register");
 
     let first = deliver(&mut tracker, &router, &control_envelope(SESSION_ID, 0))
         .expect("the first post-resume delivery should execute");
-    assert_eq!(first, RouteDisposition::Handled(MessageChannel::Control));
+    assert_eq!(first, RouteDisposition::Handled(AppChannel::Control));
 
     store
         .load(PEER_ID)
         .expect("trust reload during the reconnect cycle should succeed");
     let second = deliver(&mut tracker, &router, &control_envelope(SESSION_ID, 1))
         .expect("the second post-resume delivery should execute");
-    assert_eq!(second, RouteDisposition::Handled(MessageChannel::Control));
+    assert_eq!(second, RouteDisposition::Handled(AppChannel::Control));
     assert_eq!(
         handler.sequences(),
         vec![0, 1],
@@ -582,7 +581,7 @@ fn revoked_peer_is_not_resurrected_after_reconnect() {
 
     let mut tracker = SequenceTracker::new(SESSION_ID).expect("tracker should be created");
     let mut router = SessionRouter::new();
-    let handler = Arc::new(CountingHandler::new(MessageChannel::Control));
+    let handler = Arc::new(CountingHandler::new(AppChannel::Control));
     router
         .register(handler.clone())
         .expect("the control handler should register");
@@ -601,7 +600,7 @@ fn revoked_peer_is_not_resurrected_after_reconnect() {
         "a revoked peer must not execute messages after reconnect"
     );
     assert_eq!(
-        tracker.last_accepted(MessageChannel::Control),
+        tracker.last_accepted(AppChannel::Control),
         None,
         "no tracker state is created for a revoked peer"
     );

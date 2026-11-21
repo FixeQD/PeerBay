@@ -2,12 +2,10 @@ use super::PairingExchange;
 use super::crypto::*;
 use super::types::*;
 use super::validation::*;
+use crate::messages::{PairingNonce as ProtocolNonce, PairingReveal};
 use crate::pairing::PairingExchangeError;
-use proto::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
 
-use sha2::{Digest, Sha256};
-use std::time::{Duration, Instant};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 impl PairingExchange {
     pub fn reveal(&mut self) -> Result<ProtocolNonce, PairingExchangeError> {

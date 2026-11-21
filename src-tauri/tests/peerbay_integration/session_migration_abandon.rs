@@ -10,6 +10,7 @@ use proto::{
     ChannelMigration, ChannelResumeCursor, ResumeError, ResumeKey, ResumeRejectionReason,
     SessionChannel, SessionResumeAccepted, SessionResumeRequest,
 };
+
 use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportChannel, TransportKind,
 };

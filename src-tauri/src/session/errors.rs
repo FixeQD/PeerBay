@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use proto::MessageChannel;
+use crate::messages::AppChannel;
 
 use super::state::InvalidSessionTransition;
 
@@ -10,14 +10,14 @@ pub enum SessionError {
     Closed,
     ChannelNotAttached,
     HandlerAlreadyRegistered {
-        domain: MessageChannel,
+        domain: AppChannel,
     },
     HandlerDomainMismatch {
-        expected: MessageChannel,
-        got: MessageChannel,
+        expected: AppChannel,
+        got: AppChannel,
     },
     UnsupportedDomain {
-        domain: MessageChannel,
+        domain: AppChannel,
     },
 }
 
