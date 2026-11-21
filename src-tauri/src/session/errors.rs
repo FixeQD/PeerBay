@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::protocol::MessageChannel;
+use proto::MessageChannel;
 
 use super::state::InvalidSessionTransition;
 

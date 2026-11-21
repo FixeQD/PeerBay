@@ -1,11 +1,11 @@
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use crate::protocol::{
+use proto::{
     ChannelMigration, ChannelResumeCursor, ProtocolLimits, ResumeKey, ResumeRejectionReason,
     SessionChannel, SessionResumeAccepted, SessionResumeRejected, SessionResumeRequest,
 };
-use crate::transport::{ChannelKind, Transport, TransportChannel, TransportKind};
+use transport::{Transport, TransportChannel, TransportKind};
 
 use crate::session::state::SessionState;
 
@@ -175,7 +175,7 @@ impl TransportMigrationInitiator {
             }
         }
 
-        let expected_kind = ChannelKind::from(self.channel);
+        let expected_kind = super::session_channel_kind(self.channel);
         if plan.old_channel.kind() != expected_kind {
             return Err(eros::error!(MigrationError::ChannelKindMismatch));
         }

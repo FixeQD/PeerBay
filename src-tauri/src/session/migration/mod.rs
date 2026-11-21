@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
-use crate::protocol::{ChannelResumeCursor, ResumeRejectionReason, SessionChannel};
-use crate::transport::{ChannelKind, TransportKind};
+use proto::{ChannelResumeCursor, ResumeRejectionReason, SessionChannel};
+use transport::{ChannelKind, TransportKind};
 
 use super::state::{InvalidSessionTransition, SessionState};
 
@@ -233,15 +233,13 @@ impl Display for MigrationError {
 
 impl std::error::Error for MigrationError {}
 
-impl From<SessionChannel> for ChannelKind {
-    fn from(value: SessionChannel) -> Self {
-        match value {
-            SessionChannel::Control => ChannelKind::Control,
-            SessionChannel::Bulk => ChannelKind::Bulk,
-            SessionChannel::Media => ChannelKind::Media,
-            SessionChannel::Input => ChannelKind::Input,
-            SessionChannel::Fallback => ChannelKind::Fallback,
-        }
+pub(crate) fn session_channel_kind(channel: SessionChannel) -> ChannelKind {
+    match channel {
+        SessionChannel::Control => ChannelKind::Control,
+        SessionChannel::Bulk => ChannelKind::Bulk,
+        SessionChannel::Media => ChannelKind::Media,
+        SessionChannel::Input => ChannelKind::Input,
+        SessionChannel::Fallback => ChannelKind::Fallback,
     }
 }
 

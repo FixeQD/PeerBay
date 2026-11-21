@@ -1,16 +1,14 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use peerbay_lib::protocol::{
-    ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION, PingBody, PongBody,
-    SequenceError,
-};
 use peerbay_lib::session::{
     DisconnectTrigger, LivenessStatus, PeerSession, SessionError, SessionState,
 };
-use peerbay_lib::transport::{
-    ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind,
+use proto::{
+    ControlMessageType, MessageEnvelope, MessageType, PROTOCOL_VERSION, PingBody, PongBody,
+    SequenceError,
 };
+use transport::{ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind};
 
 const SESSION_ID: &str = "session-peer-session-0001";
 const NOW_MS: u64 = 1_000_000;
@@ -31,7 +29,7 @@ fn in_memory_pair() -> (Arc<InMemoryTransport>, Arc<InMemoryTransport>) {
 
 struct AttachedPair {
     a: Arc<InMemoryTransport>,
-    channel_a: peerbay_lib::transport::TransportChannel,
+    channel_a: transport::TransportChannel,
     peer_a: PeerSession,
     peer_b: PeerSession,
 }

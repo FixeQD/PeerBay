@@ -3,8 +3,8 @@ use std::thread;
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
+use identity::{IdentityKeyPair, IdentityKeyStoreError};
 use peerbay_lib::app::AppRuntime;
-use peerbay_lib::identity::{IdentityKeyPair, IdentityKeyStoreError};
 
 use super::{PRIVATE_KEY_BYTES, key_store_error};
 

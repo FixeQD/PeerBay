@@ -1,7 +1,7 @@
 use super::crypto::{hex_decode, hex_encode, now_ms};
-use crate::identity::{validate_display_name, validate_platform};
 use crate::pairing::PairingExchangeError;
 use crate::storage::PeerRecord;
+use identity::{validate_display_name, validate_platform};
 
 use rand::Rng;
 use sha2::{Digest, Sha256};

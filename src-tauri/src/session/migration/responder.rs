@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use crate::protocol::{
+use proto::{
     ChannelMigration, ProtocolLimits, ResumeRejectionReason, SessionChannel, SessionResumeAccepted,
     SessionResumeRejected, SessionResumeRequest,
 };
-use crate::transport::{ChannelKind, Transport, TransportChannel};
+use transport::{Transport, TransportChannel};
 
 use super::keys::ResumeKeyStore;
 use super::{
@@ -144,7 +144,7 @@ impl TransportMigrationResponder {
         transport: Arc<dyn Transport>,
         channel: TransportChannel,
     ) -> eros::Result<()> {
-        if channel.kind() != ChannelKind::from(self.channel) {
+        if channel.kind() != super::session_channel_kind(self.channel) {
             return Err(eros::error!(MigrationError::ChannelKindMismatch));
         }
 

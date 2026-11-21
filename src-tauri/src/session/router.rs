@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::protocol::{MessageChannel, MessageEnvelope, MessageType, ProtocolLimits};
+use proto::{MessageChannel, MessageEnvelope, MessageType, ProtocolLimits};
 
 use super::SessionError;
 

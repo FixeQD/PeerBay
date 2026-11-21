@@ -1,12 +1,7 @@
-mod certificate;
-mod device;
-mod keypair;
 mod persistence;
 mod runtime;
-mod security;
-mod store;
 
-use peerbay_lib::identity::{DeviceIdentityError, IdentityKeyStoreError};
+use identity::{DeviceIdentityError, IdentityKeyStoreError};
 
 const DEVICE_ID: &str = "123e4567-e89b-12d3-a456-426614174000";
 const PRIVATE_KEY_BYTES: [u8; 32] = [7; 32];

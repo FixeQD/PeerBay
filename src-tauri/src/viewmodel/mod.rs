@@ -1,8 +1,14 @@
 //! Projections of Rust application state for the WebView.
 
+pub mod command;
 pub mod error;
 pub mod snapshot;
 
+pub use command::{
+    AppCommand, AudioCommand, ClipboardCommand, CommandError, DevicesCommand, DiagnosticsCommand,
+    FilesCommand, FolderShareCommand, IdentityCommand, InputCommand, PairCommand, PhoneCommand,
+    PhoneScreenMode, PolicyCommand, ScreenCommand, SessionCommand, UiCommand,
+};
 pub use error::{ErrorDetail, ErrorFeatureScope, ErrorView, ViewModelErrorCode};
 pub use snapshot::{
     AppStatusView, AppViewModel, DeviceAction, DeviceActionView, DeviceView,

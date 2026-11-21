@@ -2,14 +2,14 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use peerbay_lib::protocol::{ChannelResumeCursor, ResumeKey, SessionChannel};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, DisconnectTrigger, Heartbeat, HeartbeatConfig, MigrationConfig,
     MigrationPlan, ReconnectBackoff, ReconnectBackoffConfig, ResumeKeyStore, SessionChannelLedger,
     SessionResources, SessionResumeOutcome, SessionState, TransportMigrationInitiator,
     TransportMigrationResponder,
 };
-use peerbay_lib::transport::{
+use proto::{ChannelResumeCursor, ResumeKey, SessionChannel};
+use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport, TransportChannel, TransportKind,
     TransportMetrics,
 };

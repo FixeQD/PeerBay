@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
-use crate::transport::{Transport, TransportChannel};
+use transport::{Transport, TransportChannel};
 
 use super::errors::SessionError;
 use super::heartbeat::Heartbeat;

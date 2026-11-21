@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "src-tauri",
+    "crates/identity",
+    "crates/proto",
+    "crates/transport",
     "crates/native-webview-surface",
     "crates/framed-ipc",
     "crates/semantic-input",
@@ -10,6 +13,11 @@ resolver = "2"
 [workspace.dependencies]
 eros = "0.8"
 framed-ipc = { path = "crates/framed-ipc" }
+identity = { path = "crates/identity" }
+proto = { path = "crates/proto" }
+transport = { path = "crates/transport" }
+serde = { version = "1", features = ["derive"] }
+zeroize = "1"
 uuid = { version = "1", features = ["v4"] }
 
 [profile.release]

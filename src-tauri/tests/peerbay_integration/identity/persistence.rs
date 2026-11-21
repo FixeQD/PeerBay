@@ -4,11 +4,11 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use peerbay_lib::app::AppRuntime;
-use peerbay_lib::identity::{
+use identity::{
     DeviceIdentity, DeviceIdentityError, IdentityKeyPair, IdentityKeyStoreError,
     TransportCertificate,
 };
+use peerbay_lib::app::AppRuntime;
 
 use super::{DEVICE_ID, PRIVATE_KEY_BYTES, identity_error, key_store_error};
 

@@ -1,16 +1,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use peerbay_lib::protocol::{
-    ChannelMigration, ChannelResumeCursor, ResumeError, ResumeKey, ResumeRejectionReason,
-    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
-};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, MigrationConfig, MigrationFailure, MigrationPhase, MigrationPlan,
     MigrationTeardownSummary, ResumeAcceptOutcome, ResumeKeyStore, SessionResumeOutcome,
     TransportMigrationInitiator, TransportMigrationResponder,
 };
-use peerbay_lib::transport::{
+use proto::{
+    ChannelMigration, ChannelResumeCursor, ResumeError, ResumeKey, ResumeRejectionReason,
+    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
+};
+use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportChannel, TransportKind,
 };
 

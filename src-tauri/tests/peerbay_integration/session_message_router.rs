@@ -2,12 +2,12 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
-use peerbay_lib::protocol::{
-    ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
-    MessageChannel, MessageEnvelope, MessageType, PairingMessageType, PhoneMessageType,
-};
 use peerbay_lib::session::{
     RouteDisposition, RoutedMessage, SessionError, SessionMessageHandler, SessionRouter,
+};
+use proto::{
+    ClipboardMessageType, ControlMessageType, FileMessageType, InputMessageType, MediaMessageType,
+    MessageChannel, MessageEnvelope, MessageType, PairingMessageType, PhoneMessageType,
 };
 
 struct RecordingHandler {

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use peerbay_lib::session::{
     ChannelReleaseSummary, MAX_TRACKED_CHANNELS, ReleaseError, SessionChannelLedger,
 };
-use peerbay_lib::transport::{
+use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, Transport, TransportChannel, TransportKind,
     TransportMetrics,
 };

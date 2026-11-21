@@ -1,7 +1,6 @@
 use peerbay_lib::pairing::{
     PairingExchange, PairingExchangeError, PairingExchangeState, PairingSession,
 };
-use peerbay_lib::protocol::pairing::PairingAccepted;
 use peerbay_lib::storage::PeerTrustStore;
 use std::time::Duration;
 
@@ -43,9 +42,7 @@ fn confirmed_pair() -> (PairingSession, PairingSession) {
     initiator.apply_nonce(&responder_reveal).unwrap();
 
     let code = initiator.emit_pairing_code(10_000).unwrap();
-    let confirm =
-        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
-            .unwrap();
+    let confirm = proto::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code).unwrap();
     responder.verify_pairing_confirm(&confirm).unwrap();
 
     (
@@ -129,9 +126,8 @@ fn initiator_apply_accepted_rejects_unsafe_peer_display_name() {
     let code = initiator
         .emit_pairing_code(10_000)
         .expect("initiator should still be able to emit its pairing code");
-    let confirm =
-        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
-            .expect("confirmation should be valid");
+    let confirm = proto::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
     initiator
         .verify_pairing_confirm(&confirm)
         .expect("initiator should record its own SAS confirmation before applying accepted trust");
@@ -186,9 +182,8 @@ fn initiator_apply_accepted_persists_trust_from_peer_token() {
     let code = initiator
         .emit_pairing_code(10_000)
         .expect("initiator should still be able to emit its pairing code");
-    let confirm =
-        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
-            .expect("confirmation should be valid");
+    let confirm = proto::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
     initiator
         .verify_pairing_confirm(&confirm)
         .expect("initiator should record its own SAS confirmation before applying accepted trust");
@@ -220,9 +215,8 @@ fn apply_accepted_rejects_expired_session_token() {
     let code = initiator
         .emit_pairing_code(10_000)
         .expect("initiator should still be able to emit its pairing code");
-    let confirm =
-        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
-            .expect("confirmation should be valid");
+    let confirm = proto::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
     initiator
         .verify_pairing_confirm(&confirm)
         .expect("initiator should record its own SAS confirmation");
@@ -248,9 +242,8 @@ fn apply_accepted_rejects_wrong_pairing_id() {
     let code = initiator
         .emit_pairing_code(10_000)
         .expect("initiator should still be able to emit its pairing code");
-    let confirm =
-        peerbay_lib::protocol::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
-            .expect("confirmation should be valid");
+    let confirm = proto::pairing::PairingConfirm::accepted("pair-trust-1", code.sas_code)
+        .expect("confirmation should be valid");
     initiator
         .verify_pairing_confirm(&confirm)
         .expect("initiator should record its own SAS confirmation");

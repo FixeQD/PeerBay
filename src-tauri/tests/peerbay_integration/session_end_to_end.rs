@@ -5,22 +5,22 @@ use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 
+use identity::TransportCertificate;
 use peerbay_lib::discovery::DiscoveryRegistry;
-use peerbay_lib::identity::TransportCertificate;
 use peerbay_lib::pairing::{PairingExchange, PairingExchangeState, PairingManager};
-use peerbay_lib::protocol::pairing::{PairingAccepted, PairingConfirm};
-use peerbay_lib::protocol::{
-    ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope, MessageType,
-    PROTOCOL_VERSION, PingBody, PongBody, ResumeKey, ResumeRejectionReason, SequenceError,
-    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
-};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, DisconnectTrigger, LivenessStatus, MigrationConfig, MigrationPlan,
     PeerSession, ReconnectBackoff, ReconnectBackoffConfig, ReconnectDecision, ResumeKeyStore,
     SessionResumeOutcome, SessionState, TransportMigrationInitiator, TransportMigrationResponder,
 };
 use peerbay_lib::storage::PeerTrustStore;
-use peerbay_lib::transport::{
+use proto::pairing::{PairingAccepted, PairingConfirm};
+use proto::{
+    ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope, MessageType,
+    PROTOCOL_VERSION, PingBody, PongBody, ResumeKey, ResumeRejectionReason, SequenceError,
+    SessionChannel, SessionResumeAccepted, SessionResumeRequest,
+};
+use transport::{
     ChannelKind, InMemoryTransport, PeerEndpoint, TcpTransport, TlsTransport, Transport,
     TransportChannel, TransportKind,
 };

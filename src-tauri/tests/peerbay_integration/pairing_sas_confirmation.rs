@@ -3,7 +3,7 @@
 use peerbay_lib::pairing::{
     PairingExchange, PairingExchangeError, PairingExchangeState, PairingSession, SAS_CODE_LENGTH,
 };
-use peerbay_lib::protocol::pairing::PairingConfirm;
+use proto::pairing::PairingConfirm;
 use std::time::Duration;
 
 const INITIATOR_FINGERPRINT: &str =

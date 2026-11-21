@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use eros::Context;
 
-use crate::identity::{DeviceIdentity, IdentityKeyPair, IdentityKeyStore, TransportCertificate};
+use identity::{DeviceIdentity, IdentityKeyPair, IdentityKeyStore, TransportCertificate};
 
 use super::{AppState, LifecycleState, WorkerContext, WorkerSupervisor};
 

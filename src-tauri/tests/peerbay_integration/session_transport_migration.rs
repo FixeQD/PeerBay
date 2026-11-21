@@ -1,18 +1,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use peerbay_lib::protocol::{
-    ChannelMigration, ChannelResumeCursor, ResumeKey, ResumeRejectionReason, SessionChannel,
-    SessionResumeRequest,
-};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, MigrationConfig, MigrationError, MigrationPhase, MigrationPlan,
     MigrationRouteState, ResumeAcceptOutcome, ResumeKeyStore, SessionResumeOutcome,
     TransportMigrationInitiator, TransportMigrationResponder,
 };
-use peerbay_lib::transport::{
-    ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind,
+use proto::{
+    ChannelMigration, ChannelResumeCursor, ResumeKey, ResumeRejectionReason, SessionChannel,
+    SessionResumeRequest,
 };
+use transport::{ChannelKind, InMemoryTransport, PeerEndpoint, Transport as _, TransportKind};
 
 use peerbay_lib::session::SessionState;
 
@@ -51,7 +49,7 @@ fn control_cursor() -> ChannelResumeCursor {
 
 fn plan_for(
     old_transport: Arc<InMemoryTransport>,
-    old_channel: peerbay_lib::transport::TransportChannel,
+    old_channel: transport::TransportChannel,
 ) -> MigrationPlan {
     MigrationPlan {
         old_transport,
@@ -615,8 +613,8 @@ fn resume_key_store_debug_is_redacted() {
 
 #[test]
 fn transport_kind_labels_match_wire_names() {
-    use peerbay_lib::transport::TransportKind as Kind;
     use serde_json::json;
+    use transport::TransportKind as Kind;
 
     assert_eq!(Kind::LocalNetwork.as_str(), "local_network");
     assert_eq!(Kind::UsbAdb.as_str(), "usb_adb");

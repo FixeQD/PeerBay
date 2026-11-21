@@ -1,16 +1,22 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
+use identity::DeviceIdentity;
 use peerbay_lib::app::LifecycleState;
 use peerbay_lib::discovery::DiscoveredPeer;
-use peerbay_lib::identity::DeviceIdentity;
-use peerbay_lib::protocol::CapabilityDocument;
 use peerbay_lib::session::SessionState;
 use peerbay_lib::storage::PeerRecord;
 use peerbay_lib::viewmodel::{
-    AppViewModel, DeviceAction, DeviceView, ErrorDetail, ErrorFeatureScope, ErrorView,
-    FeatureRowState, FeatureRowView, MAX_DEVICES, MAX_SESSIONS, MAX_SNAPSHOT_BYTES, SessionSummary,
-    SnapshotInputs, TrustStatus, VIEWMODEL_SCHEMA_VERSION, ViewModelError, ViewModelErrorCode,
+    AppCommand, AppViewModel, AudioCommand, ClipboardCommand, CommandError, DeviceAction,
+    DeviceView, DevicesCommand, DiagnosticsCommand, ErrorDetail, ErrorFeatureScope, ErrorView,
+    FeatureRowState, FeatureRowView, FilesCommand, FolderShareCommand, IdentityCommand,
+    InputCommand, MAX_DEVICES, MAX_SESSIONS, MAX_SNAPSHOT_BYTES, PairCommand, PhoneCommand,
+    PhoneScreenMode, PolicyCommand, ScreenCommand, SessionCommand, SessionSummary, SnapshotInputs,
+    TrustStatus, UiCommand, VIEWMODEL_SCHEMA_VERSION, ViewModelError, ViewModelErrorCode,
+};
+use proto::{
+    CapabilityDocument, FeaturePolicy, PolicyError, PrivilegeProvider, ProtocolLimitError,
+    UserPolicyState,
 };
 
 const LOCAL_DEVICE_ID: &str = "33333333-3333-4333-8333-333333333333";
@@ -854,5 +860,401 @@ fn real_snapshot_build_failures_map_to_error_views() {
             value: MAX_SESSIONS + 1,
             limit: MAX_SESSIONS,
         })
+    );
+}
+
+fn feature_policy() -> FeaturePolicy {
+    FeaturePolicy::new(
+        "clipboard.text",
+        UserPolicyState::Allow,
+        Vec::new(),
+        None,
+        None,
+    )
+    .unwrap()
+}
+
+fn all_commands() -> Vec<UiCommand> {
+    vec![
+        UiCommand::App(AppCommand::GetSnapshot),
+        UiCommand::App(AppCommand::GetDiagnostics),
+        UiCommand::App(AppCommand::Shutdown),
+        UiCommand::Identity(IdentityCommand::Get),
+        UiCommand::Identity(IdentityCommand::SetName {
+            display_name: "Nowa Nazwa".to_owned(),
+        }),
+        UiCommand::Devices(DevicesCommand::List),
+        UiCommand::Devices(DevicesCommand::StartDiscovery),
+        UiCommand::Devices(DevicesCommand::StopDiscovery),
+        UiCommand::Devices(DevicesCommand::Forget {
+            device_id: PEER_DEVICE_ID.to_owned(),
+        }),
+        UiCommand::Pair(PairCommand::Start {
+            device_id: PEER_DEVICE_ID.to_owned(),
+            transport_hint: Some("tcp".to_owned()),
+        }),
+        UiCommand::Pair(PairCommand::Confirm {
+            pairing_id: "pair-1".to_owned(),
+        }),
+        UiCommand::Pair(PairCommand::Cancel {
+            pairing_id: "pair-1".to_owned(),
+        }),
+        UiCommand::Session(SessionCommand::Connect {
+            device_id: PEER_DEVICE_ID.to_owned(),
+        }),
+        UiCommand::Session(SessionCommand::Disconnect {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Session(SessionCommand::Takeover {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Session(SessionCommand::Release {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Policy(PolicyCommand::Get {
+            peer_id: PEER_DEVICE_ID.to_owned(),
+        }),
+        UiCommand::Policy(PolicyCommand::Set {
+            peer_id: PEER_DEVICE_ID.to_owned(),
+            base_revision: 3,
+            changes: vec![feature_policy()],
+        }),
+        UiCommand::Clipboard(ClipboardCommand::GetHistory {
+            peer_id: Some(PEER_DEVICE_ID.to_owned()),
+        }),
+        UiCommand::Clipboard(ClipboardCommand::ClearHistory),
+        UiCommand::Clipboard(ClipboardCommand::SetPolicy {
+            peer_id: PEER_DEVICE_ID.to_owned(),
+            policy: feature_policy(),
+        }),
+        UiCommand::Files(FilesCommand::ChooseSources),
+        UiCommand::Files(FilesCommand::ChooseDestination),
+        UiCommand::Files(FilesCommand::Send {
+            peer_id: PEER_DEVICE_ID.to_owned(),
+            source_handles: vec!["handle-1".to_owned(), "handle-2".to_owned()],
+        }),
+        UiCommand::Files(FilesCommand::Cancel {
+            transfer_id: "transfer-1".to_owned(),
+        }),
+        UiCommand::Files(FilesCommand::Pause {
+            transfer_id: "transfer-1".to_owned(),
+        }),
+        UiCommand::Files(FilesCommand::Resume {
+            transfer_id: "transfer-1".to_owned(),
+        }),
+        UiCommand::FolderShare(FolderShareCommand::Start {
+            peer_id: PEER_DEVICE_ID.to_owned(),
+            folder_handle: "folder-1".to_owned(),
+        }),
+        UiCommand::FolderShare(FolderShareCommand::Stop {
+            share_id: "share-1".to_owned(),
+        }),
+        UiCommand::Phone(PhoneCommand::RequestApps {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Phone(PhoneCommand::OpenScreen {
+            session_id: "session-1".to_owned(),
+            mode: PhoneScreenMode::Viewer,
+        }),
+        UiCommand::Phone(PhoneCommand::CloseScreen {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Phone(PhoneCommand::RequestPrivilege {
+            session_id: "session-1".to_owned(),
+            capability: "phone.input.root".to_owned(),
+            provider_hint: Some(PrivilegeProvider::Root),
+        }),
+        UiCommand::Phone(PhoneCommand::CancelPrivilegeRequest {
+            request_id: "request-1".to_owned(),
+        }),
+        UiCommand::Screen(ScreenCommand::Start {
+            session_id: "session-1".to_owned(),
+            mode: "primary".to_owned(),
+        }),
+        UiCommand::Screen(ScreenCommand::Stop {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Audio(AudioCommand::Start {
+            session_id: "session-1".to_owned(),
+            direction: "to_peer".to_owned(),
+        }),
+        UiCommand::Audio(AudioCommand::Stop {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Input(InputCommand::SetLayout {
+            session_id: "session-1".to_owned(),
+            layout: "pl".to_owned(),
+        }),
+        UiCommand::Input(InputCommand::Take {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Input(InputCommand::Release {
+            session_id: "session-1".to_owned(),
+        }),
+        UiCommand::Diagnostics(DiagnosticsCommand::Export),
+    ]
+}
+
+#[test]
+fn full_command_catalog_roundtrips_and_validates() {
+    let commands = all_commands();
+    assert_eq!(commands.len(), 42);
+    for command in &commands {
+        command
+            .validate()
+            .expect("catalog command must pass validation");
+        let serialized = serde_json::to_string(command).unwrap();
+        let deserialized: UiCommand = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(&deserialized, command);
+    }
+}
+
+#[test]
+fn command_wire_contract_is_snake_case() {
+    let command = UiCommand::App(AppCommand::GetSnapshot);
+    assert_eq!(
+        serde_json::to_string(&command).unwrap(),
+        "{\"app\":\"get_snapshot\"}"
+    );
+
+    let command = UiCommand::Session(SessionCommand::Connect {
+        device_id: PEER_DEVICE_ID.to_owned(),
+    });
+    assert_eq!(
+        serde_json::to_string(&command).unwrap(),
+        "{\"session\":{\"connect\":{\"device_id\":\"11111111-1111-4111-8111-111111111111\"}}}"
+    );
+
+    let command = UiCommand::Phone(PhoneCommand::OpenScreen {
+        session_id: "session-1".to_owned(),
+        mode: PhoneScreenMode::Controller,
+    });
+    let serialized = serde_json::to_string(&command).unwrap();
+    assert!(serialized.contains("\"open_screen\""));
+    assert!(serialized.contains("\"mode\":\"controller\""));
+
+    let command = UiCommand::FolderShare(FolderShareCommand::Stop {
+        share_id: "share-1".to_owned(),
+    });
+    let serialized = serde_json::to_string(&command).unwrap();
+    assert!(serialized.contains("\"folder_share\""));
+
+    assert!(serde_json::from_str::<PhoneScreenMode>("\"mirror\"").is_err());
+}
+
+#[test]
+fn command_validation_rejects_invalid_shapes() {
+    let malformed = UiCommand::Devices(DevicesCommand::Forget {
+        device_id: "not-a-uuid".to_owned(),
+    });
+    assert!(malformed.validate().is_err());
+
+    let nil = UiCommand::Devices(DevicesCommand::Forget {
+        device_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+    });
+    assert!(nil.validate().is_err());
+
+    let non_canonical = UiCommand::Devices(DevicesCommand::Forget {
+        device_id: "abcdefab-1234-4abc-8def-abcdefabcdef".to_uppercase(),
+    });
+    assert!(non_canonical.validate().is_err());
+
+    for display_name in ["", " x", "\u{0007}", "x\u{0000}"] {
+        let command = UiCommand::Identity(IdentityCommand::SetName {
+            display_name: display_name.to_owned(),
+        });
+        assert!(
+            command.validate().is_err(),
+            "name {display_name:?} must fail"
+        );
+    }
+    let too_long_name = UiCommand::Identity(IdentityCommand::SetName {
+        display_name: "n".repeat(129),
+    });
+    assert!(too_long_name.validate().is_err());
+
+    let blank_session = UiCommand::Session(SessionCommand::Disconnect {
+        session_id: "   ".to_owned(),
+    });
+    let error = blank_session.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<ProtocolLimitError>().ok(),
+        Some(ProtocolLimitError::InvalidIdentifier {
+            field: "session_id"
+        })
+    );
+
+    let control_session = UiCommand::Session(SessionCommand::Disconnect {
+        session_id: "sess\u{0007}ion".to_owned(),
+    });
+    let error = control_session.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::ControlCharacter {
+            field: "session_id"
+        })
+    );
+
+    let padded_session = UiCommand::Session(SessionCommand::Disconnect {
+        session_id: " session-1".to_owned(),
+    });
+    let error = padded_session.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::UnexpectedWhitespace {
+            field: "session_id"
+        })
+    );
+
+    let oversized_session = UiCommand::Session(SessionCommand::Disconnect {
+        session_id: "s".repeat(4097),
+    });
+    let error = oversized_session.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<ProtocolLimitError>().ok(),
+        Some(ProtocolLimitError::StringTooLong {
+            field: "session_id",
+            length: 4097,
+            max: 4096,
+        })
+    );
+
+    let empty_send = UiCommand::Files(FilesCommand::Send {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        source_handles: Vec::new(),
+    });
+    let error = empty_send.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::EmptyBatch {
+            field: "source_handles"
+        })
+    );
+
+    let duplicate_send = UiCommand::Files(FilesCommand::Send {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        source_handles: vec!["handle-1".to_owned(), "handle-1".to_owned()],
+    });
+    let error = duplicate_send.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::DuplicateEntry {
+            field: "source_handles"
+        })
+    );
+
+    let oversized_send = UiCommand::Files(FilesCommand::Send {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        source_handles: (0..257).map(|index| format!("handle-{index:04}")).collect(),
+    });
+    let error = oversized_send.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<ProtocolLimitError>().ok(),
+        Some(ProtocolLimitError::BatchTooLarge {
+            field: "source_handles",
+            count: 257,
+            max: 256,
+        })
+    );
+
+    let empty_changes = UiCommand::Policy(PolicyCommand::Set {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        base_revision: 1,
+        changes: Vec::new(),
+    });
+    let error = empty_changes.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::EmptyBatch { field: "changes" })
+    );
+
+    let invalid_policy = FeaturePolicy {
+        feature: "clipboard.text".to_owned(),
+        state: UserPolicyState::Allow,
+        limitations: vec!["max-10".to_owned()],
+        max_bytes: None,
+        expires_at_ms: None,
+    };
+    let restricted_change = UiCommand::Policy(PolicyCommand::Set {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        base_revision: 1,
+        changes: vec![invalid_policy],
+    });
+    let error = restricted_change.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<PolicyError>().ok(),
+        Some(PolicyError::RestrictionsRequireLimitedState {
+            feature: "clipboard.text".to_owned(),
+        })
+    );
+
+    let bad_capability = UiCommand::Phone(PhoneCommand::RequestPrivilege {
+        session_id: "session-1".to_owned(),
+        capability: "phone input root".to_owned(),
+        provider_hint: None,
+    });
+    let error = bad_capability.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::InvalidIdentifierCharacter {
+            field: "capability"
+        })
+    );
+
+    let local_history = UiCommand::Clipboard(ClipboardCommand::GetHistory { peer_id: None });
+    assert!(local_history.validate().is_ok());
+
+    let unicode_name = UiCommand::Identity(IdentityCommand::SetName {
+        display_name: "Telefon Zażółć Gęślą Jaźń".to_owned(),
+    });
+    assert!(unicode_name.validate().is_ok());
+}
+
+#[test]
+fn command_payloads_exclude_domain_and_secret_material() {
+    for command in all_commands() {
+        let serialized = serde_json::to_string(&command).unwrap();
+        assert!(!serialized.contains("fingerprint"));
+        assert!(!serialized.contains("certificate"));
+        assert!(!serialized.contains("private_key"));
+        assert!(!serialized.contains("token_hash"));
+        assert!(!serialized.contains(&"a".repeat(64)));
+    }
+}
+
+#[test]
+fn policy_commands_reuse_feature_policy_contract() {
+    let allow_limited = FeaturePolicy::new(
+        "clipboard.files",
+        UserPolicyState::AllowLimited,
+        Vec::new(),
+        Some(1024),
+        None,
+    )
+    .unwrap();
+    let command = UiCommand::Policy(PolicyCommand::Set {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        base_revision: 7,
+        changes: vec![allow_limited.clone()],
+    });
+    assert!(command.validate().is_ok());
+
+    let serialized = serde_json::to_string(&command).unwrap();
+    assert!(serialized.contains("\"base_revision\":7"));
+    assert!(serialized.contains("\"allow_limited\""));
+    assert!(serialized.contains("\"max_bytes\":1024"));
+
+    let deserialized: UiCommand = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized, command);
+
+    let duplicate_features = UiCommand::Policy(PolicyCommand::Set {
+        peer_id: PEER_DEVICE_ID.to_owned(),
+        base_revision: 7,
+        changes: vec![allow_limited.clone(), allow_limited],
+    });
+    let error = duplicate_features.validate().unwrap_err();
+    assert_eq!(
+        error.downcast_inner::<CommandError>().ok(),
+        Some(CommandError::DuplicateEntry { field: "changes" })
     );
 }

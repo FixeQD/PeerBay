@@ -3,15 +3,12 @@ mod commands;
 pub mod discovery;
 mod events;
 mod features;
-pub mod identity;
 pub mod pairing;
 pub mod platform;
-pub mod protocol;
 pub mod redaction;
 pub mod security;
 pub mod session;
 pub mod storage;
-pub mod transport;
 pub mod viewmodel;
 
 use app::AppRuntime;

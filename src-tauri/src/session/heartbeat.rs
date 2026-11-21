@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use crate::protocol::PongBody;
+use proto::PongBody;
 
 const MAX_PENDING_PINGS: usize = 16;
 

@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 use rand::random;
 use zeroize::Zeroize;
 
-use crate::protocol::{ProtocolLimits, ResumeKey};
+use proto::{ProtocolLimits, ResumeKey};
 
 pub struct ResumeKeyStore {
     session_id: String,

@@ -6,11 +6,11 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use zeroize::Zeroizing;
 
-use crate::protocol::{
+use proto::{
     ControlMessageType, MessageChannel, MessageEnvelope, MessageType, PingBody, PongBody,
     ProtocolLimits, SequenceTracker,
 };
-use crate::transport::{Transport, TransportChannel};
+use transport::{Transport, TransportChannel};
 
 use super::errors::SessionError;
 use super::heartbeat::{Heartbeat, HeartbeatConfig, RttSample};

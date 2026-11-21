@@ -3,11 +3,11 @@ use std::fmt::{Display, Formatter};
 
 use crate::app::LifecycleState;
 use crate::discovery::DiscoveredPeer;
-use crate::identity::{DeviceIdentity, validate_display_name, validate_platform};
-use crate::protocol::CapabilityDocument;
 use crate::redaction::RedactionPolicy;
 use crate::session::SessionState;
 use crate::storage::PeerRecord;
+use identity::{DeviceIdentity, validate_display_name, validate_platform};
+use proto::CapabilityDocument;
 
 pub const VIEWMODEL_SCHEMA_VERSION: u16 = 1;
 pub const MAX_DEVICES: usize = 1024;

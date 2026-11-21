@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use peerbay_lib::protocol::PongBody;
 use peerbay_lib::session::{Heartbeat, HeartbeatConfig, LivenessStatus};
+use proto::PongBody;
 
 #[test]
 fn heartbeat_starts_alive_and_times_out_without_inbound_traffic() {
@@ -9,8 +9,14 @@ fn heartbeat_starts_alive_and_times_out_without_inbound_traffic() {
     let config = HeartbeatConfig::new(Duration::from_secs(5), Duration::from_secs(15));
     let mut heartbeat = Heartbeat::new(config, start);
 
-    assert_eq!(heartbeat.check(start + Duration::from_secs(14)), LivenessStatus::Alive);
-    assert_eq!(heartbeat.check(start + Duration::from_secs(15)), LivenessStatus::TimedOut);
+    assert_eq!(
+        heartbeat.check(start + Duration::from_secs(14)),
+        LivenessStatus::Alive
+    );
+    assert_eq!(
+        heartbeat.check(start + Duration::from_secs(15)),
+        LivenessStatus::TimedOut
+    );
     assert!(heartbeat.timed_out());
 }
 
@@ -37,7 +43,11 @@ fn heartbeat_ignores_unknown_pongs() {
     let mut heartbeat = Heartbeat::new(HeartbeatConfig::default(), start);
     let pong = PongBody::new("missing", None).expect("pong body");
 
-    assert!(heartbeat.record_pong(&pong, start + Duration::from_millis(10)).is_none());
+    assert!(
+        heartbeat
+            .record_pong(&pong, start + Duration::from_millis(10))
+            .is_none()
+    );
     assert_eq!(heartbeat.latest_rtt(), None);
 }
 
@@ -48,8 +58,14 @@ fn inbound_activity_refreshes_liveness_timeout() {
     let mut heartbeat = Heartbeat::new(config, start);
 
     heartbeat.record_inbound(start + Duration::from_secs(10));
-    assert_eq!(heartbeat.check(start + Duration::from_secs(24)), LivenessStatus::Alive);
-    assert_eq!(heartbeat.check(start + Duration::from_secs(25)), LivenessStatus::TimedOut);
+    assert_eq!(
+        heartbeat.check(start + Duration::from_secs(24)),
+        LivenessStatus::Alive
+    );
+    assert_eq!(
+        heartbeat.check(start + Duration::from_secs(25)),
+        LivenessStatus::TimedOut
+    );
 }
 
 #[test]

@@ -121,7 +121,7 @@ impl PeerRecord {
     }
 
     pub fn validate_display_name(display_name: &str) -> eros::Result<()> {
-        crate::identity::validate_display_name(display_name).map_err(|_| {
+        identity::validate_display_name(display_name).map_err(|_| {
             eros::error!(StorageError::ValidationFailed {
                 reason: "display name must be a safe device label"
             })
@@ -129,7 +129,7 @@ impl PeerRecord {
     }
 
     pub fn validate_platform(platform: &str) -> eros::Result<()> {
-        crate::identity::validate_platform(platform).map_err(|_| {
+        identity::validate_platform(platform).map_err(|_| {
             eros::error!(StorageError::ValidationFailed {
                 reason: "platform must be a safe device label"
             })
@@ -137,7 +137,7 @@ impl PeerRecord {
     }
 
     pub fn validate_preferred_transport(preferred_transport: &str) -> eros::Result<()> {
-        crate::identity::validate_platform(preferred_transport).map_err(|_| {
+        identity::validate_platform(preferred_transport).map_err(|_| {
             eros::error!(StorageError::ValidationFailed {
                 reason: "preferred transport must be a safe transport label"
             })

@@ -5,8 +5,8 @@ use super::trust::*;
 use super::types::*;
 use super::validation::*;
 use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{PairingAccepted, PairingCode, PairingConfirm};
 use crate::storage::PeerTrustStore;
+use proto::pairing::{PairingAccepted, PairingCode, PairingConfirm};
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
@@ -78,7 +78,7 @@ impl PairingExchange {
     /// Records the expiry of an issued pairing code propagated to this peer
     pub fn apply_pairing_code(
         &mut self,
-        code: &crate::protocol::pairing::PairingCode,
+        code: &proto::pairing::PairingCode,
     ) -> Result<(), PairingExchangeError> {
         if code.pairing_id != self.pairing_id {
             return Err(PairingExchangeError::InvalidPairingId);

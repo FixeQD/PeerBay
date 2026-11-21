@@ -2067,6 +2067,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "identity"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "eros",
+ "rand",
+ "rcgen",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "uuid",
+ "x509-parser",
+ "zeroize",
+]
+
+[[package]]
 name = "idna"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2983,12 +2999,11 @@ dependencies = [
  "argon2",
  "ed25519-dalek",
  "eros",
- "framed-ipc",
  "hmac",
+ "identity",
  "path-clean",
+ "proto",
  "rand",
- "rcgen",
- "rustls",
  "secret-service",
  "serde",
  "serde_json",
@@ -2999,8 +3014,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "transport",
  "uuid",
- "x509-parser",
  "zeroize",
 ]
 
@@ -3253,6 +3268,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "proto"
+version = "0.1.0"
+dependencies = [
+ "eros",
+ "framed-ipc",
+ "serde",
+ "serde_json",
+ "zeroize",
 ]
 
 [[package]]
@@ -4708,6 +4734,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "transport"
+version = "0.1.0"
+dependencies = [
+ "eros",
+ "identity",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]

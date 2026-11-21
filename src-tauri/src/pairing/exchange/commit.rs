@@ -3,9 +3,7 @@ use super::crypto::*;
 use super::types::*;
 use super::validation::*;
 use crate::pairing::PairingExchangeError;
-use crate::protocol::pairing::{
-    PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart,
-};
+use proto::pairing::{PairingCommit, PairingNonce as ProtocolNonce, PairingReveal, PairingStart};
 
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};

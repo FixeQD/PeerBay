@@ -1,5 +1,5 @@
 use crate::pairing::PairingExchangeError;
-use crate::protocol::limits::ProtocolLimits;
+use proto::limits::ProtocolLimits;
 
 pub(super) const MAX_PAIRING_ID_LENGTH: usize = 128;
 pub(super) const MAX_DEVICE_ID_LENGTH: usize = 128;

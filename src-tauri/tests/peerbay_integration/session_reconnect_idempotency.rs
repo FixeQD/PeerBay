@@ -1,11 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use peerbay_lib::protocol::{
-    ChannelMigration, ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope,
-    MessageType, ResumeKey, SequenceError, SequenceTracker, SessionChannel, SessionResumeAccepted,
-    SessionResumeRequest,
-};
 use peerbay_lib::session::{
     ChannelSeqSnapshot, MigrationConfig, MigrationRouteState, ReconnectBackoff,
     ReconnectBackoffConfig, ReconnectDecision, ResumeKeyStore, RouteDisposition, RoutedMessage,
@@ -13,6 +8,11 @@ use peerbay_lib::session::{
     TransportMigrationResponder,
 };
 use peerbay_lib::storage::{PeerRecord, PeerTrustStore};
+use proto::{
+    ChannelMigration, ChannelResumeCursor, ControlMessageType, MessageChannel, MessageEnvelope,
+    MessageType, ResumeKey, SequenceError, SequenceTracker, SessionChannel, SessionResumeAccepted,
+    SessionResumeRequest,
+};
 use serde_json::{Value, json};
 
 const SESSION_ID: &str = "session-reconnect-idem-0001";
